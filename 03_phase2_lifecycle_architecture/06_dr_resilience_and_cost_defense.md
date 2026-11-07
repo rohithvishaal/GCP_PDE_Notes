@@ -44,16 +44,16 @@ Selecting the correct geographic deployment strategy represents the primary arch
 
 ```mermaid
 graph TD
-    subgraph Bucket & Dataset Topologies
-        Reg[Regional: us-central1<br/>Lowest Latency, Lowest Cost<br/>Zero Regional Redundancy]
-        Dual[Dual-Region: us-central1 + us-east4<br/>Turbo Replication: 15-min SLA<br/>Automated Geo-Failover]
-        Multi[Multi-Region: US or EU<br/>Geo-Distributed across continental data centers<br/>Eventual Replication]
+    subgraph Topologies["Bucket & Dataset Topologies"]
+        Reg["Regional: us-central1<br/>Lowest Latency, Lowest Cost<br/>Zero Regional Redundancy"]
+        Dual["Dual-Region: us-central1 + us-east4<br/>Turbo Replication: 15-min SLA<br/>Automated Geo-Failover"]
+        Multi["Multi-Region: US or EU<br/>Geo-Distributed across continental data centers<br/>Eventual Replication"]
     end
 
-    subgraph Disaster Event: us-central1 Outage
-        Reg -->|Result| Outage1[Data Unavailable until Region Restores<br/>RTO = Hours / Days]
-        Dual -->|Result| Outage2[Zero RPO Loss (<15 min Turbo)<br/>RTO < 5 minutes via bucket endpoint]
-        Multi -->|Result| Outage3[Data Available in Sibling Zones<br/>RTO < 15 minutes]
+    subgraph Outage["Disaster Event: us-central1 Outage"]
+        Reg -->|Result| Outage1["Data Unavailable until Region Restores<br/>RTO = Hours / Days"]
+        Dual -->|Result| Outage2["Zero RPO Loss (<15 min Turbo)<br/>RTO < 5 minutes via bucket endpoint"]
+        Multi -->|Result| Outage3["Data Available in Sibling Zones<br/>RTO < 15 minutes"]
     end
 ```
 
@@ -174,19 +174,19 @@ Under BigQuery Editions, organizations no longer purchase static, rigid slot blo
 
 ```mermaid
 graph TD
-    subgraph Capacity Pool: 2000 Max Slots
-        subgraph Baseline Slots
-            Base[100 Baseline Slots: Always On<br/>Committed at discounted rate]
+    subgraph Pool["Capacity Pool: 2000 Max Slots"]
+        subgraph BasePool["Baseline Slots"]
+            Base["100 Baseline Slots: Always On<br/>Committed at discounted rate"]
         end
         
-        subgraph Dynamic Autoscaling Pool
-            Auto[Dynamic Burst Slots: Scales 0 to 1,900 Slots<br/>Spins up in 100-slot increments on demand<br/>Scales down immediately when queries complete]
+        subgraph AutoPool["Dynamic Autoscaling Pool"]
+            Auto["Dynamic Burst Slots: Scales 0 to 1,900 Slots<br/>Spins up in 100-slot increments on demand<br/>Scales down immediately when queries complete"]
         end
     end
 
-    subgraph Workload Reservation Assignments
-        Res1[Reservation: 'bi-reporting'<br/>Baseline: 100 slots<br/>Autoscale Max: 1,000 slots<br/>Ignore Idle Slots: FALSE]
-        Res2[Reservation: 'batch-elt'<br/>Baseline: 0 slots<br/>Autoscale Max: 1,000 slots<br/>Ignore Idle Slots: FALSE]
+    subgraph Assignments["Workload Reservation Assignments"]
+        Res1["Reservation: bi-reporting<br/>Baseline: 100 slots<br/>Autoscale Max: 1,000 slots<br/>Ignore Idle Slots: FALSE"]
+        Res2["Reservation: batch-elt<br/>Baseline: 0 slots<br/>Autoscale Max: 1,000 slots<br/>Ignore Idle Slots: FALSE"]
     end
 
     Base & Auto --> Res1 & Res2

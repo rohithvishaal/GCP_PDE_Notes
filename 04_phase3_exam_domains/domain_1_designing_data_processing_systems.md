@@ -194,7 +194,7 @@ flowchart TD
 
     Ingestion_Project -->|Pipeline Reads| Compute_Project
     Compute_Project -->|Pipeline Writes| Warehouse_Project
-    Consumption_Project -.->|Query Execution (Billed to Analytics)| Warehouse_Project
+    Consumption_Project -.->|"Query Execution (Billed to Analytics)"| Warehouse_Project
 ```
 
 *   **Separation of Compute and Storage Billing**: Queries submitted by analysts in `prj-prod-analytics` are billed to `prj-prod-analytics` (using their own reservation or on-demand budget), while storage costs remain in `prj-prod-warehouse`.
@@ -291,7 +291,7 @@ flowchart LR
     BQ_Console -->|1. Submit SQL| Query_Coordinator
     Query_Coordinator -->|2. Send Query Execution Graph| AWS_Anthos
     AWS_Anthos <-->|3. Scan & Process In-Region| S3_Buckets
-    AWS_Anthos -->|4. Return Final Aggregation (Few KB/MB)| Query_Coordinator
+    AWS_Anthos -->|"4. Return Final Aggregation (Few KB/MB)"| Query_Coordinator
     Query_Coordinator -->|5. Deliver Result| BQ_Console
 ```
 

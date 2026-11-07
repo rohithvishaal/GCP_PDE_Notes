@@ -10,19 +10,19 @@ graph TD
     
     DataWorkload --> WorkloadType{"Primary Workload?"}
     
-    WorkloadType -->|Analytics, Lakehouse & DWH| Analytics{"Data Format & Query Language?"}
-    Analytics -->|Columnar ANSI SQL, Lakehouse, Petabyte Scale| BigQuery["BigQuery & BigLake"]
-    Analytics -->|Unstructured, Raw Lake, Staging, Blob| GCS["Cloud Storage (GCS)"]
+    WorkloadType -->|"Analytics, Lakehouse & DWH"| Analytics{"Data Format & Query Language?"}
+    Analytics -->|"Columnar ANSI SQL, Lakehouse, Petabyte Scale"| BigQuery["BigQuery & BigLake"]
+    Analytics -->|"Unstructured, Raw Lake, Staging, Blob"| GCS["Cloud Storage (GCS)"]
 
-    WorkloadType -->|Operational OLTP Relational| Relational{"Scale & Geography?"}
-    Relational -->|Global / Multi-Region Scale, Unlimited ACID| Spanner["Cloud Spanner"]
-    Relational -->|Regional High-Perf PostgreSQL 4x Speed| AlloyDB["AlloyDB for PostgreSQL"]
-    Relational -->|Regional Traditional RDBMS (Postgres, MySQL, SQL Server)| CloudSQL["Cloud SQL"]
+    WorkloadType -->|"Operational OLTP Relational"| Relational{"Scale & Geography?"}
+    Relational -->|"Global / Multi-Region Scale, Unlimited ACID"| Spanner["Cloud Spanner"]
+    Relational -->|"Regional High-Perf PostgreSQL 4x Speed"| AlloyDB["AlloyDB for PostgreSQL"]
+    Relational -->|"Regional Traditional RDBMS (Postgres, MySQL, SQL Server)"| CloudSQL["Cloud SQL"]
 
-    WorkloadType -->|NoSQL / Low Latency Operational| NoSQL{"Access Pattern & Scale?"}
-    NoSQL -->|Sub-10ms, High-Throughput Key-Value / Time-Series (TB+)| Bigtable["Cloud Bigtable"]
-    NoSQL -->|Document / Mobile / Real-Time Client Sync| Firestore["Cloud Firestore"]
-    NoSQL -->|Sub-millisecond In-Memory Caching| Memorystore["Memorystore (Redis / Memcached)"]
+    WorkloadType -->|"NoSQL / Low Latency Operational"| NoSQL{"Access Pattern & Scale?"}
+    NoSQL -->|"Sub-10ms, High-Throughput Key-Value / Time-Series (TB+)"| Bigtable["Cloud Bigtable"]
+    NoSQL -->|"Document / Mobile / Real-Time Client Sync"| Firestore["Cloud Firestore"]
+    NoSQL -->|"Sub-millisecond In-Memory Caching"| Memorystore["Memorystore (Redis / Memcached)"]
 ```
 
 ---

@@ -151,7 +151,7 @@ graph LR
     end
 
     ETLJob -->|Private RFC 1918 traffic| PSC_Endpoint
-    PSC_Endpoint -->|Private Service Connect (Unidirectional NAT)| ManagedDB
+    PSC_Endpoint -->|"Private Service Connect (Unidirectional NAT)"| ManagedDB
     ETLJob -->|Outbound HTTPS only| NAT_Gateway
     NAT_Gateway -->|Internet Egress| PublicAPI
 ```

@@ -168,11 +168,11 @@ graph TD
     end
 
     subgraph PubSub_Core["Cloud Pub/Sub Architecture"]
-        PubSubTopic[Topic: clickstream-events<br/>Retention: 10m to 31d]
+        PubSubTopic["Topic: clickstream-events<br/>Retention: 10m to 31d"]
         
-        PubSubTopic --> SubA[Subscription 1: Dataflow Streaming Engine<br/>Ack Deadline: 60s<br/>(Unordered / Event-Time Handled in Beam)]
-        PubSubTopic --> SubB[Subscription 2: BigQuery Direct Subscription<br/>Table: raw_clickstream]
-        PubSubTopic --> SubC[Subscription 3: Microservice Sequential Worker<br/>Ack Deadline: 60s<br/>Ordering Key: customer_id]
+        PubSubTopic --> SubA["Subscription 1: Dataflow Streaming Engine<br/>Ack Deadline: 60s<br/>(Unordered / Event-Time Handled in Beam)"]
+        PubSubTopic --> SubB["Subscription 2: BigQuery Direct Subscription<br/>Table: raw_clickstream"]
+        PubSubTopic --> SubC["Subscription 3: Microservice Sequential Worker<br/>Ack Deadline: 60s<br/>Ordering Key: customer_id"]
         
         SubC -.Max 5 Retries (Best-Effort).-> DLT[Dead Letter Topic: poison-pill-topic]
     end

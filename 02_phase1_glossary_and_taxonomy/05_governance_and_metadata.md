@@ -38,7 +38,7 @@ graph TD
     DomainSales -.-> DataplexGovernance
     DomainFinance -.-> DataplexGovernance
     SalesBQ -->|Publish Listing| AnalyticsHub
-    AnalyticsHub -->|Linked Dataset (Zero-Copy)| ExternalConsumer["External Partner / Vendor"]
+    AnalyticsHub -->|"Linked Dataset (Zero-Copy)"| ExternalConsumer["External Partner / Vendor"]
 ```
 
 ---

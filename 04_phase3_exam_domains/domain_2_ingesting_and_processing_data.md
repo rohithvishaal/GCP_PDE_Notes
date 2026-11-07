@@ -141,7 +141,7 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    Pub["Publishers<br/>(Microservices / IoT)"] -->|Publish (Ordering Key = customer_id)| Topic["Pub/Sub Topic"]
+    Pub["Publishers<br/>(Microservices / IoT)"] -->|"Publish (Ordering Key = customer_id)"| Topic["Pub/Sub Topic"]
     Topic --> Sub1["Pull Subscription<br/>(Dataflow Processing)"]
     Topic --> Sub2["BigQuery Direct Ingestion<br/>(No Compute Sink)"]
     Topic --> Sub3["Cloud Storage Direct Ingestion<br/>(Raw Parquet Lake)"]

@@ -17,17 +17,17 @@ graph TD
     A[Data Processing Workload] --> B{What is the processing nature?}
     
     B -->|SQL Transformations on BigQuery| C[Dataform / BigQuery SQL]
-    C --> C1[Declarative SQLX<br/>Built-in Dependency Graphs<br/>Zero Compute Cluster Ops]
+    C --> C1["Declarative SQLX<br/>Built-in Dependency Graphs<br/>Zero Compute Cluster Ops"]
     
     B -->|Pipeline Construction Type| D{Code vs. Visual GUI?}
     
     D -->|Visual / Enterprise ETL Connectors| E[Cloud Data Fusion]
-    E --> E1[CDAP Enterprise Platform<br/>Pre-built Connectors to On-Prem / SaaS<br/>Underlying Dataproc Execution]
+    E --> E1["CDAP Enterprise Platform<br/>Pre-built Connectors to On-Prem / SaaS<br/>Underlying Dataproc Execution"]
     
     D -->|Programmatic Code| F{Ecosystem & Runtime?}
     
-    F -->|Unified Streaming & Batch / Out-of-Order Events| G[Cloud Dataflow]
-    G --> G1[Apache Beam Runtime<br/>Exactly-once Semantics<br/>Dynamic Work Rebalancing<br/>Liquid Sharding]
+    F -->|"Unified Streaming & Batch / Out-of-Order Events"| G[Cloud Dataflow]
+    G --> G1["Apache Beam Runtime<br/>Exactly-once Semantics<br/>Dynamic Work Rebalancing<br/>Liquid Sharding"]
     
     F -->|Existing Spark / Hadoop / Hive / Flink Code| H{Cluster Management Need?}
     H -->|Need Low-Level Tuning / JNI / Custom Daemons| I[Dataproc on Compute Engine]
@@ -95,7 +95,7 @@ sequenceDiagram
 
     Worker1->>Master: Heartbeat: Remaining split [50% - 100%] (Lagging)
     Worker2->>Master: Heartbeat: Split finished (Idle)
-    Master->>Worker1: Abort processing at 75%; yield range [75% - 100%]
+    Master->>Worker1: Abort processing at 75%, yield range [75% - 100%]
     Worker1-->>Master: Range [75% - 100%] relinquished
     Master->>Worker2: Assign Dynamic Split [75% - 100%]
     Worker2->>Source: Read and process relinquished split
@@ -147,24 +147,24 @@ flowchart TD
     Start([Data Processing Requirement]) --> Q1{Is the primary source data<br/>already inside BigQuery?}
     
     Q1 -->|Yes| Q1A{Are transformations<br/>expressible in SQL?}
-    Q1A -->|Yes| Sol_Dataform[Target: Dataform<br/>- Zero cluster overhead<br/>- Native BigQuery slot scaling<br/>- SQLX dependency graphs]
+    Q1A -->|Yes| Sol_Dataform["Target: Dataform<br/>- Zero cluster overhead<br/>- Native BigQuery slot scaling<br/>- SQLX dependency graphs"]
     Q1A -->|No: Custom ML/Python logic| Q2
     
     Q1 -->|No: Ingestion + Processing needed| Q2{What is the latency<br/>and data nature?}
     
-    Q2 -->|Unbounded Real-time Stream<br/>Sub-second to few seconds latency| Q3{Processing Semantics & Source?}
-    Q3 -->|Pub/Sub, Kafka, IoT<br/>Complex Windowing, Deduplication| Sol_Dataflow_Stream[Target: Cloud Dataflow Streaming<br/>- Apache Beam SDK<br/>- Exactly-once semantics<br/>- Streaming Engine enabled]
-    Q3 -->|Structured Streaming<br/>on legacy Spark/Flink code| Sol_Dataproc_Stream[Target: Dataproc GCE Cluster<br/>- Spark Streaming / Flink<br/>- Long-running dedicated VMs]
+    Q2 -->|"Unbounded Real-time Stream<br/>Sub-second to few seconds latency"| Q3{Processing Semantics & Source?}
+    Q3 -->|"Pub/Sub, Kafka, IoT<br/>Complex Windowing, Deduplication"| Sol_Dataflow_Stream["Target: Cloud Dataflow Streaming<br/>- Apache Beam SDK<br/>- Exactly-once semantics<br/>- Streaming Engine enabled"]
+    Q3 -->|"Structured Streaming<br/>on legacy Spark/Flink code"| Sol_Dataproc_Stream["Target: Dataproc GCE Cluster<br/>- Spark Streaming / Flink<br/>- Long-running dedicated VMs"]
     
     Q2 -->|Bounded Batch Processing| Q4{Do you have existing<br/>Hadoop / Spark code?}
     
     Q4 -->|Yes: Existing PySpark / Hive / Spark JARs| Q5{Cluster control requirements?}
-    Q5 -->|Requires custom daemons, native libs, GPUs, custom Hadoop configs| Sol_Dataproc_GCE[Target: Dataproc on Compute Engine<br/>- Ephemeral or Long-Running<br/>- Primary Standard + Secondary Spot VMs<br/>- Decoupled GCS Storage]
-    Q5 -->|Standard Spark jobs, no cluster maintenance, team isolation| Sol_Dataproc_Serv[Target: Dataproc Serverless<br/>- Submit PySpark/Spark SQL batch<br/>- Dynamic DCU scaling<br/>- Zero infra management]
+    Q5 -->|"Requires custom daemons, native libs, GPUs, custom Hadoop configs"| Sol_Dataproc_GCE["Target: Dataproc on Compute Engine<br/>- Ephemeral or Long-Running<br/>- Primary Standard + Secondary Spot VMs<br/>- Decoupled GCS Storage"]
+    Q5 -->|"Standard Spark jobs, no cluster maintenance, team isolation"| Sol_Dataproc_Serv["Target: Dataproc Serverless<br/>- Submit PySpark/Spark SQL batch<br/>- Dynamic DCU scaling<br/>- Zero infra management"]
     
     Q4 -->|No: Building fresh pipelines| Q6{Development interface preference?}
-    Q6 -->|Visual GUI, Drag-and-Drop, No-Code, Legacy ETL Tools| Sol_Fusion[Target: Cloud Data Fusion<br/>- CDAP visual pipeline designer<br/>- 150+ pre-built enterprise connectors<br/>- Automated lineage tracking]
-    Q6 -->|Code-first: Java, Python, Go, Unified Stream/Batch API| Sol_Dataflow_Batch[Target: Cloud Dataflow Batch<br/>- Apache Beam SDK<br/>- Liquid sharding<br/>- Dataflow Shuffle Service]
+    Q6 -->|"Visual GUI, Drag-and-Drop, No-Code, Legacy ETL Tools"| Sol_Fusion["Target: Cloud Data Fusion<br/>- CDAP visual pipeline designer<br/>- 150+ pre-built enterprise connectors<br/>- Automated lineage tracking"]
+    Q6 -->|"Code-first: Java, Python, Go, Unified Stream/Batch API"| Sol_Dataflow_Batch["Target: Cloud Dataflow Batch<br/>- Apache Beam SDK<br/>- Liquid sharding<br/>- Dataflow Shuffle Service"]
 ```
 
 ---

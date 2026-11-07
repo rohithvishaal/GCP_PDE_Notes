@@ -271,7 +271,7 @@ flowchart LR
 
     subgraph Subscriber_Project["Data Subscriber: partner-analytics"]
         SubDS["Linked Dataset: sales_curated_ro"]
-        Ex -->|Subscribe (Zero Data Copy)| SubDS
+        Ex -->|"Subscribe (Zero Data Copy)"| SubDS
         QueryEngine["Subscriber BigQuery Engine"]
         QueryEngine --> SubDS
     end

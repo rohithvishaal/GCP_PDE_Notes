@@ -86,22 +86,22 @@ graph TD
     
     DataEntry --> IngestType{"Workload Type?"}
     
-    IngestType -->|Real-Time Event Stream| StreamingChoice{"Need global auto-scaling or partition management?"}
-    StreamingChoice -->|Global, Zero-Ops, Auto-partitioning| PubSub["Use Cloud Pub/Sub"]
-    StreamingChoice -->|Kafka-like partition control & low cost| PubSubLite["Use Pub/Sub Lite"]
+    IngestType -->|"Real-Time Event Stream"| StreamingChoice{"Need global auto-scaling or partition management?"}
+    StreamingChoice -->|"Global, Zero-Ops, Auto-partitioning"| PubSub["Use Cloud Pub/Sub"]
+    StreamingChoice -->|"Kafka-like partition control & low cost"| PubSubLite["Use Pub/Sub Lite"]
 
-    IngestType -->|Relational Database CDC| DatastreamChoice["Use Datastream (Serverless Log-Based CDC)"]
+    IngestType -->|"Relational Database CDC"| DatastreamChoice["Use Datastream (Serverless Log-Based CDC)"]
 
-    IngestType -->|Distributed Compute Engine| ComputeChoice{"Framework Preference?"}
-    ComputeChoice -->|Apache Beam (Unified Batch+Stream, Exactly-Once)| Dataflow["Use Cloud Dataflow"]
-    ComputeChoice -->|Existing Spark/Hadoop codebase| Dataproc["Use Cloud Dataproc / Dataproc Serverless"]
-    ComputeChoice -->|SQL-first ELT inside Warehouse| Dataform["Use Dataform"]
+    IngestType -->|"Distributed Compute Engine"| ComputeChoice{"Framework Preference?"}
+    ComputeChoice -->|"Apache Beam (Unified Batch+Stream, Exactly-Once)"| Dataflow["Use Cloud Dataflow"]
+    ComputeChoice -->|"Existing Spark/Hadoop codebase"| Dataproc["Use Cloud Dataproc / Dataproc Serverless"]
+    ComputeChoice -->|"SQL-first ELT inside Warehouse"| Dataform["Use Dataform"]
 
-    IngestType -->|Analytical Serving & Querying| QueryChoice{"Format & Latency SLA?"}
-    QueryChoice -->|SQL on Columnar / Lakehouse (<1s to minutes)| BigQuery["Use BigQuery + BigLake"]
-    QueryChoice -->|Sub-10ms Key-Value / Time-Series (TB-PB scale)| Bigtable["Use Cloud Bigtable"]
-    QueryChoice -->|Global Multi-Region ACID Relational Transactions| Spanner["Use Cloud Spanner"]
-    QueryChoice -->|Enterprise Operational OLTP (PostgreSQL compatibility)| AlloyDB["Use AlloyDB / Cloud SQL"]
+    IngestType -->|"Analytical Serving & Querying"| QueryChoice{"Format & Latency SLA?"}
+    QueryChoice -->|"SQL on Columnar / Lakehouse (<1s to minutes)"| BigQuery["Use BigQuery + BigLake"]
+    QueryChoice -->|"Sub-10ms Key-Value / Time-Series (TB-PB scale)"| Bigtable["Use Cloud Bigtable"]
+    QueryChoice -->|"Global Multi-Region ACID Relational Transactions"| Spanner["Use Cloud Spanner"]
+    QueryChoice -->|"Enterprise Operational OLTP (PostgreSQL compatibility)"| AlloyDB["Use AlloyDB / Cloud SQL"]
 ```
 
 ---

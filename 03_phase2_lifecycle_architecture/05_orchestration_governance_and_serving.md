@@ -48,10 +48,10 @@ flowchart TD
 
     subgraph Orchestration_Engine_Selection["Orchestration Engine Selection"]
         EventTrigger --> EventCheck{Execution Characteristic?}
-        EventCheck -->|<100ms latency, Serverless, HTTP APIs| Workflows["Cloud Workflows<br/>(Serverless YAML State Machine)<br/>Billed per step, zero idle cost"]
+        EventCheck -->|"<100ms latency, Serverless, HTTP APIs"| Workflows["Cloud Workflows<br/>(Serverless YAML State Machine)<br/>Billed per step, zero idle cost"]
         
         ScheduledTrigger --> ComposerCheck{Dependency Profile?}
-        ComposerCheck -->|Python Operators, SLAs, Sensors, Spark/Dataform| Composer["Cloud Composer 3<br/>(Managed Apache Airflow on GKE)<br/>Rich UI, complex DAG dependencies"]
+        ComposerCheck -->|"Python Operators, SLAs, Sensors, Spark/Dataform"| Composer["Cloud Composer 3<br/>(Managed Apache Airflow on GKE)<br/>Rich UI, complex DAG dependencies"]
     end
 
     subgraph Managed_Downstream_Tasks["Target Execution Services"]
@@ -124,11 +124,11 @@ Enterprise data pipelines involve heterogeneous systems: ingesting files from SF
 ```mermaid
 graph TD
     subgraph Cloud_Composer_Architecture["Cloud Composer 3 Architecture (GKE Autopilot)"]
-        Scheduler[Airflow Scheduler Fleet<br/>(Parses DAGs, Evaluates Dependencies)]
-        Triggerer[Airflow Triggerer<br/>(Async Event Loop for Deferrable Sensors)]
-        Workers[Dynamic GKE Worker Fleet<br/>(Dispatches Tasks & Operators)]
+        Scheduler["Airflow Scheduler Fleet<br/>(Parses DAGs, Evaluates Dependencies)"]
+        Triggerer["Airflow Triggerer<br/>(Async Event Loop for Deferrable Sensors)"]
+        Workers["Dynamic GKE Worker Fleet<br/>(Dispatches Tasks & Operators)"]
         MetadataDB[(Cloud SQL Postgres<br/>Airflow State Metadata)]
-        DAG_Bucket[Cloud Storage DAGs Bucket<br/>gs://.../dags/]
+        DAG_Bucket["Cloud Storage DAGs Bucket<br/>gs://.../dags/"]
     end
 
     DAG_Bucket -->|Sync Python DAGs| Scheduler

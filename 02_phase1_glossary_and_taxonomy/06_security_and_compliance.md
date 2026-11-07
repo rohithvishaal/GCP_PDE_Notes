@@ -75,7 +75,7 @@ sequenceDiagram
     App->>Storage: 7. Read Encrypted Data + EDEK
     App->>KMS: 8. Decrypt(EDEK) via KEK
     KMS-->>App: 9. Return plaintext DEK in memory
-    App->>App: 10. Decrypt data chunk; serve query
+    App->>App: 10. Decrypt data chunk, then serve query
 ```
 
 - **Data Encryption Key (DEK)**: Fast, symmetric AES-256 key generated in memory to encrypt the actual data blocks. Rotated frequently.

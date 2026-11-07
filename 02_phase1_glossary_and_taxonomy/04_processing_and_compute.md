@@ -10,13 +10,13 @@ graph TD
     
     PipelineRequirement --> TechChoice{"Processing Paradigm & Engine?"}
     
-    TechChoice -->|Unified Batch & Streaming / Complex Windowing / Beam| Dataflow["Cloud Dataflow (Apache Beam)"]
-    TechChoice -->|Existing Spark / PySpark / Hadoop Ecosystem| DataprocChoice{"Cluster Management Preference?"}
-    TechChoice -->|Visual, No-Code Pipeline Design (CDAP)| DataFusion["Cloud Data Fusion"]
-    TechChoice -->|SQL-Based Transformation Inside BigQuery (ELT)| Dataform["Dataform (SQLX)"]
+    TechChoice -->|"Unified Batch & Streaming / Complex Windowing / Beam"| Dataflow["Cloud Dataflow (Apache Beam)"]
+    TechChoice -->|"Existing Spark / PySpark / Hadoop Ecosystem"| DataprocChoice{"Cluster Management Preference?"}
+    TechChoice -->|"Visual, No-Code Pipeline Design (CDAP)"| DataFusion["Cloud Data Fusion"]
+    TechChoice -->|"SQL-Based Transformation Inside BigQuery (ELT)"| Dataform["Dataform (SQLX)"]
 
-    DataprocChoice -->|Zero-Ops, Fully Serverless Spark| DataprocServerless["Dataproc Serverless (Batches)"]
-    DataprocChoice -->|Managed Spark on GCE / Custom Spark Packages| DataprocGCE["Cloud Dataproc on Compute Engine"]
+    DataprocChoice -->|"Zero-Ops, Fully Serverless Spark"| DataprocServerless["Dataproc Serverless (Batches)"]
+    DataprocChoice -->|"Managed Spark on GCE / Custom Spark Packages"| DataprocGCE["Cloud Dataproc on Compute Engine"]
 ```
 
 ---
