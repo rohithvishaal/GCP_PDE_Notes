@@ -64,8 +64,13 @@ graph TD
 
 ---
 
-### Cloud Spanner: Breaking the CAP Theorem via TrueTime
-Cloud Spanner provides strict ACID transactions and relational schemas at horizontal, planetary scale without sacrificing consistency.
+### Cloud Spanner: Achieving External Consistency (CP System with 99.999% Practical Availability)
+Cloud Spanner provides strict ACID transactions and relational schemas at horizontal, planetary scale.
+
+> [!NOTE]
+> **CAP Theorem Nuance (The Brewer Classification)**:
+> In formal distributed systems theory, Spanner does **not** break or violate Eric Brewer's CAP theorem. Mathematically, Spanner is a **CP system** (Consistency + Partition tolerance): if an improbable network partition isolates replicas, Spanner's Paxos consensus chooses **Consistency over Availability** (writes that cannot achieve quorum will block or fail). 
+> However, because Google operates its own private trans-oceanic fiber network with redundant physical paths, network partitions occur with near-zero frequency. Coupled with TrueTime bounded clock uncertainty, Spanner delivers **99.999% availability in practice ("effectively CA")** while remaining formally a CP system.
 
 #### The TrueTime Mechanism:
 Traditional distributed databases cannot achieve serializability across distributed nodes without heavy lock contention or two-phase commit overhead because hardware clocks drift (NTP can drift by hundreds of milliseconds).

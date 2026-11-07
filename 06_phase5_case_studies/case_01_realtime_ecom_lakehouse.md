@@ -28,7 +28,7 @@ flowchart TD
     end
 
     subgraph Operational Serving Layer
-        BT_Sink --> Bigtable[(Cloud Bigtable: User Profiles<br/>- Multi-Cluster SSD<br/>- Sub-10ms SLA<br/>- Autoscaling Nodes)]
+        BT_Sink --> Bigtable[(Cloud Bigtable: User Profiles<br/>- Multi-Cluster SSD<br/>- Sub-10ms Target Latency<br/>- 99.99% Availability SLA)]
         FrontEndAPI[Storefront Personalization Engine] -->|Rowkey Point Lookup < 6ms| Bigtable
     end
 
@@ -83,8 +83,12 @@ sequenceDiagram
 
 ## 4. Data Storage & Schema Design
 
-### Cloud Bigtable: Sub-10ms Real-Time Serving Layer
-Bigtable is selected because it delivers single-digit millisecond reads and writes at sustained 150k QPS.
+### Cloud Bigtable: Low-Latency Real-Time Serving Layer
+Bigtable is selected because it achieves single-digit millisecond read and write latency at sustained 150k QPS when properly sized.
+
+> [!NOTE]
+> **Latency vs. Availability SLA**:
+> Bigtable's contractual SLA guarantees **99.99% availability** for multi-cluster instances. Latency (<10ms) is an operational performance target maintained by keeping cluster CPU utilization <= 70% and distributing keys via MD5 hash salting.
 
 #### Rowkey Design:
 - **Requirement**: Fast point lookups by `user_id`. Prevent tablet hotspotting across worker nodes.

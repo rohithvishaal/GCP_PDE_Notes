@@ -205,26 +205,27 @@ gcloud pubsub topics create clickstream-events \
 
 ### 4.2 Create Pull Subscription with Ordering Keys & Dead-Letter Queue
 ```bash
-gcloud pubsub subscriptions create sub-clickstream-dataflow \
-    --topic=clickstream-events \
+gcloud pubsub subscriptions create sub-order-processing-sequential \
+    --topic=order-events \
     --ack-deadline=60 \
     --enable-message-ordering \
-    --dead-letter-topic=clickstream-poison-pill-dlq \
+    --dead-letter-topic=order-poison-pill-dlq \
     --max-delivery-attempts=5 \
     --retain-acked-messages \
     --message-retention-duration=7d
 ```
-- **Explanation**: Ingestion endpoint providing per-entity serialized delivery, poison-pill routing, and 7-day replay capability.
+- **Explanation**: Ingestion endpoint providing per-entity serialized delivery, best-effort poison-pill routing, and 7-day replay capability for sequential microservices (e.g. Cloud Run / GCE).  
+  *Architectural Warning*: Do **not** enable `--enable-message-ordering` on subscriptions read by Cloud Dataflow streaming pipelines. Dataflow processes messages concurrently and manages stream ordering natively via Apache Beam event-time watermarks; enabling ordering keys on a Dataflow subscription degrades pipeline throughput and risks worker starvation.
 - **Flags**:
-  - `--ack-deadline`: Seconds subscriber has to acknowledge before message is redelivered (10–600s).
-  - `--enable-message-ordering`: Guarantees messages sharing an `orderingKey` are delivered in strict order.
-  - `--dead-letter-topic`: Topic where poison pills are routed when processing fails repeatedly.
+  - `--ack-deadline`: Seconds subscriber has to acknowledge before message is redelivered (10 to 600 seconds).
+  - `--enable-message-ordering`: Guarantees messages sharing an `orderingKey` are delivered in strict order (subject to ~1 MB/s publisher throughput ceiling per key in a region; do NOT use for Dataflow).
+  - `--dead-letter-topic`: Topic where poison pills are forwarded on a best-effort basis when processing fails repeatedly.
   - `--max-delivery-attempts`: Nacks or timeouts before evicting message to DLQ (5 attempts).
   - `--retain-acked-messages`: Keeps acknowledged messages on disk so subscribers can seek backwards in time.
 
 ### 4.3 Seek Subscription Backward in Time (Stream Replay)
 ```bash
-gcloud pubsub subscriptions seek sub-clickstream-dataflow \
+gcloud pubsub subscriptions seek sub-order-processing-sequential \
     --time="2026-11-07T00:00:00Z"
 ```
 - **Explanation**: Rewinds message delivery pointers to re-process stream data following a pipeline bug fix.
@@ -351,7 +352,7 @@ gcloud bigtable instances create retail-profile-store \
     --cluster-config=id=retail-cluster-c1,zone=us-central1-b,nodes=3,autoscaling-min=3,autoscaling-max=20,autoscaling-cpu-target=65 \
     --cluster-config=id=retail-cluster-c2,zone=us-central1-c,nodes=3,autoscaling-min=3,autoscaling-max=20,autoscaling-cpu-target=65
 ```
-- **Explanation**: Provisions an active-active, multi-zone Bigtable instance with automated CPU-based node autoscaling (sub-10ms latency).
+- **Explanation**: Provisions an active-active, multi-zone Bigtable instance with automated CPU-based node autoscaling (targets sub-10ms latency for warm SSD clusters under 65% CPU load; note that Bigtable SLAs guarantee availability, not a specific latency number).
 - **Flags**:
   - `--cluster-config`: Sets cluster ID, zone, baseline node count, and scaling thresholds.
   - `autoscaling-cpu-target=65`: Scales out nodes when average CPU load exceeds 65%.

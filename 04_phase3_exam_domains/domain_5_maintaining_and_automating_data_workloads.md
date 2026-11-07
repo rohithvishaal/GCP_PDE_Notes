@@ -44,13 +44,19 @@ Google Cloud organizes BigQuery compute into **Editions** (Standard, Enterprise,
 ```mermaid
 flowchart TD
     subgraph BigQuery_Editions_Hierarchy["BigQuery Editions Feature Matrix"]
-        Std["Standard Edition<br/>Baseline Slot Autoscaling<br/>Basic Analytics & Ad-hoc SQL"]
-        Ent["Enterprise Edition<br/>Dynamic Workload Management<br/>Materialized Views & BI Engine<br/>Column/Row Security & Data Masking"]
-        EntPlus["Enterprise Plus Edition<br/>Mission-Critical & Extreme Compliance<br/>Assured Workloads & FedRAMP / HIPAA<br/>Disaster Recovery Multi-Region Replication"]
+        Std["Standard Edition<br/>Pay-Per-Second Slot Autoscaling<br/>No Baseline Slots / No Annual CUDs<br/>Basic Analytics & Ad-hoc SQL"]
+        Ent["Enterprise Edition<br/>Baseline Slots + Autoscaling<br/>Idle Slot Sharing & Reservations<br/>VPC-SC, CMEK & Column/Row Masking"]
+        EntPlus["Enterprise Plus Edition<br/>Mission-Critical 99.99% SLA<br/>Disaster Recovery (Cross-Region Replication)<br/>Hardware-Isolated Compute & FedRAMP High"]
     end
 
     Std --> Ent --> EntPlus
 ```
+
+> [!IMPORTANT]
+> **Edition Feature Boundaries (Critical Exam Gotchas)**:
+> 1. **Baseline Slots**: Available **only** in **Enterprise** and **Enterprise Plus**. Standard Edition supports autoscaling slots only.
+> 2. **Cross-Region Disaster Recovery Replication**: Available **exclusively** in **Enterprise Plus Edition**. Standard and Enterprise editions do not support dataset replication failover.
+> 3. **Materialized Views & BI Engine**: Core SQL capabilities that work across **all** pricing tiers (including On-Demand and Standard Edition). They are not exclusive to Enterprise editions.
 
 #### Capacity Management: Baseline Slots vs. Autoscaling Slots
 *   **Baseline Slots**: Minimum dedicated slots always provisioned and warm. Prevents cold-start delays for critical reporting.

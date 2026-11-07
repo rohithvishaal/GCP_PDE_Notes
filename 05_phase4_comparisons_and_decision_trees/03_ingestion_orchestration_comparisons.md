@@ -40,7 +40,7 @@ graph TD
 | Dimension | Cloud Pub/Sub | Pub/Sub Lite | Datastream | BigQuery DTS | Storage Transfer Service (STS) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Primary Ingestion Pattern** | Asynchronous streaming events (Push / Pull) | Partitioned streaming events (Pull-only via gRPC) | Serverless Change Data Capture (CDC log stream) | Scheduled batch ELT / ingestion | High-throughput batch / event-driven object sync |
-| **Source Ecosystem** | Applications, microservices, IoT, Cloud Logging, Eventarc | High-throughput stream apps, Kafka workloads | Oracle (LogMiner), MySQL (binlog), Postgres (wal2json), Spanner | SaaS (Salesforce, Google Ads), S3, Redshift, Teradata | S3, Azure Blob, Cloud Storage, POSIX filesystems |
+| **Source Ecosystem** | Applications, microservices, IoT, Cloud Logging, Eventarc | High-throughput stream apps, Kafka workloads | Oracle (LogMiner), MySQL (binlog), Postgres (pgoutput replication), Spanner | SaaS (Salesforce, Google Ads), S3, Redshift, Teradata | S3, Azure Blob, Cloud Storage, POSIX filesystems |
 | **Destination Target** | Dataflow, Cloud Run, Cloud Functions, BigQuery (Direct Subscription) | Dataflow, Dataproc, GCE/GKE worker instances | Cloud Storage (JSON/Avro), BigQuery (Direct CDC replication) | BigQuery datasets and native tables | Cloud Storage buckets |
 | **Ordering Guarantees** | Global out-of-order by default; **Strict ordering per Ordering Key** | **Strict partition-level ordering** (identical to Apache Kafka) | **Transactionally consistent** stream with commit sequence numbers | Append / Overwrite snapshots (No streaming ordering) | File-level consistency; checksum verification |
 | **Partitioning & Scaling** | Autonomous serverless autoscaling (billions of messages/sec) | Manual partition provisioning (Capacity measured in MiB/s) | Serverless autoscaling based on source CDC transaction volume | Managed serverless scheduled execution | Highly parallelized agents (scale to petabytes/day) |
@@ -82,7 +82,7 @@ graph TD
 - Datastream connects directly to operational databases without intrusive agents:
   - **Oracle**: Uses LogMiner or Oracle GoldenGate extracts.
   - **MySQL**: Connects as a replication replica reading binary logs (`binlog`).
-  - **PostgreSQL**: Leverages logical replication slots using `pgoutput` or `wal2json`.
+  - **PostgreSQL**: Leverages logical replication slots using the native `pgoutput` plugin (standard in PostgreSQL 10+; third-party plugins like `wal2json` are not required).
 - **Destination: BigQuery Direct CDC**:
   Historically, CDC required Datastream to write Avro files to GCS, followed by a Dataflow pipeline or scheduled BigQuery `MERGE` query. Today, Datastream supports **direct replication to BigQuery**, automatically applying inserts, updates, and deletes directly into BigQuery storage using the BigQuery Storage Write API with continuous transactional consistency.
 

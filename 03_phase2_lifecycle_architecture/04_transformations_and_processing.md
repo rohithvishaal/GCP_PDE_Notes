@@ -1,11 +1,80 @@
 # 04. Distributed Transformation & SQL Processing
 
-## 1. Enterprise Scenario: Omnichannel Data Transformation
+---
 
-GlobalRetailX requires a scalable transformation layer to convert raw CDC logs, logistics updates, and clickstream events into production-ready analytical assets.
+## Learning Objectives
+By the end of this module, a data engineer or architect will be able to:
+1. **Understand** the architectural paradigm shift from traditional procedural ETL to modern declarative in-warehouse ELT and distributed batch compute.
+2. **Translate** familiar Databricks (Workspaces, Serverless Spark, DBFS), open-source Apache Spark/Hadoop, and dbt patterns directly into Cloud Dataproc, Dataproc Serverless, and Dataform.
+3. **Analyze** the operational mechanics, cost structures, and failure modes of Cloud Dataproc on Compute Engine vs. Dataproc Serverless for Spark.
+4. **Design** cost-optimized ephemeral Dataproc clusters leveraging Google Cloud Storage connectors, Spot (preemptible) secondary workers, and graceful decommissioning.
+5. **Implement** production-grade declarative SQLX transformation pipelines in Dataform incorporating incremental `MERGE` models, automated dependency graphs, and data quality assertions.
+6. **Troubleshoot** common distributed compute bottlenecks, including Spot VM preemption cascades, shuffle fetch failures, and concurrent BigQuery transaction locks.
+
+---
+
+## Databricks & Apache Spark to Google Cloud Compute Bridge
+
+Engineers transitioning from Databricks, Apache Spark, and dbt can map their processing mental models directly to Google Cloud services:
+
+| Databricks / Open Source Concept | Google Cloud Native Equivalent | Architectural Parity & Technical Distinctions |
+| :--- | :--- | :--- |
+| **Databricks Interactive / Automated Clusters** | **Cloud Dataproc on Compute Engine (GCE)** | Managed Apache Spark, Hadoop, Hive, and Presto clusters deployed on GCE VMs. Supports custom machine types, local NVMe SSDs, GPUs, and initialization actions. Ephemeral provisioning takes 90–180 seconds. |
+| **Databricks Serverless for Spark** | **Dataproc Serverless for Spark** | Completely eliminates cluster and VM infrastructure management. PySpark, Spark SQL, or Scala Spark jobs are submitted directly via CLI or API. Billed in Data Compute Units (DCUs: 1 DCU = 4 vCPUs + 16 GB RAM) strictly for execution duration. |
+| **dbt Core / dbt Cloud** | **Google Cloud Dataform (SQLX)** | Declarative, version-controlled SQL transformation framework native to BigQuery. Uses SQLX (SQL augmented with JS config blocks), compiles execution DAGs, manages incremental table merges, and runs data quality assertions without external compute servers. |
+| **DBFS (Databricks File System) / S3A** | **Cloud Storage Connector (`gs://` URI)** | Replaces local HDFS disks with Cloud Storage. The Google Cloud Storage connector enables Spark jobs to read and write directly to `gs://` buckets with zero cluster-attached disk persistence, allowing clusters to be completely ephemeral. |
+| **AWS Spot Instances / Azure Spot VMs** | **Google Cloud Spot (Preemptible) VMs** | Secondary workers in Dataproc run on Spot VMs at a **60% to 91% discount** compared to standard VM pricing. Dataproc secondary workers are compute-only (no HDFS DataNode daemons), ensuring zero data loss during preemption. |
+
+---
+
+## 1. Architectural Foundation: ETL vs. In-Warehouse ELT
+
+### The Architectural Shift: Why ELT Outperforms ETL
+For two decades, data engineering followed the traditional **ETL (Extract-Transform-Load)** paradigm:
+1. Data was extracted from operational databases.
+2. An external, dedicated compute engine (Informatica, Talend, Apache Spark) transformed and cleansed the records in memory.
+3. Cleansed records were loaded into the data warehouse.
+
+While effective in the on-premises era of constrained warehouse storage and compute, ETL introduces severe enterprise friction:
+- **Data Movement Overhead**: Terabytes of raw data cross network perimeters twice (Source $\to$ Spark Cluster $\to$ Data Warehouse).
+- **Cluster Management Burden**: Data engineers spend excessive hours tuning Spark memory fractions, YARN container sizes, and executor garbage collection.
+- **Dual Security Governance**: Access control and data masking must be maintained separately in the compute cluster and the data warehouse.
+
+Modern cloud data architecture defaults to **ELT (Extract-Load-Transform)**:
+1. **Extract & Load**: Raw data is landed directly into Cloud Storage (Bronze) and loaded into BigQuery staging tables using zero-code serverless replication (Datastream, Storage Transfer Service).
+2. **Transform in Place**: Analytical engineers write declarative ANSI SQL in **Dataform**. BigQuery compiles these queries into multi-stage execution trees, leveraging thousands of serverless Borg slots connected directly to Capacitor columnar storage over the Jupiter petabit network fabric.
+
+```mermaid
+flowchart TD
+    subgraph Raw_Staging["1. Extract & Load Layer"]
+        DS_Orders["Cloud Datastream: orders_cdc"]
+        STS_Logistics["Storage Transfer Service: 3PL Manifests"]
+        GCS_Landing["Cloud Storage Bronze Landing"]
+    end
+
+    subgraph Processing_Decision["2. Compute Engine Selection"]
+        DS_Orders & STS_Logistics & GCS_Landing --> WorkloadCheck{Transformation Nature?}
+        
+        WorkloadCheck -->|SQL Modeling, Deduplication, SCD2, Marts| Dataform["Dataform (SQLX Engine)<br/>In-Warehouse ELT inside BigQuery<br/>Zero Cluster Infrastructure Ops"]
+        WorkloadCheck -->|Existing PySpark / ML Featurization / GraphX| Dataproc["Cloud Dataproc (Apache Spark)<br/>Dataproc Serverless or Ephemeral Clusters<br/>Cloud Storage Connector gs://"]
+        WorkloadCheck -->|Unbounded Event Streaming / Sessionization| Dataflow["Cloud Dataflow (Apache Beam)<br/>Streaming Engine & Exactly-Once"]
+    end
+
+    subgraph Serving_Layer["3. Serving & Analytical Layer"]
+        Dataform --> BQ_Gold["BigQuery Gold Marts: dim_customers, fact_orders"]
+        Dataproc --> BQ_Gold
+        Dataflow --> BQ_Gold
+    end
+```
+
+---
+
+## 2. Enterprise Scenario: RetailFlow Transformation Topology
+
+RetailFlow transforms millions of daily transactions, logistics feeds, and clickstream sessions into conformed, dimensionally modeled analytical marts.
 
 ```
-                           GLOBALRETAILX TRANSFORMATION TOPOLOGY
+                           RETAILFLOW TRANSFORMATION TOPOLOGY
                            
 +----------------------------------------------------------------------------------------------------+
 |                                    RAW / STAGING DATASETS                                          |
@@ -38,37 +107,166 @@ GlobalRetailX requires a scalable transformation layer to convert raw CDC logs, 
 
 ---
 
-## 2. In-Warehouse ELT with Dataform
+## 3. Standardized Service Deep Dive: Cloud Dataproc
 
-Dataform enables data engineering teams to develop, test, version control, and schedule complex SQL transformation workflows natively inside BigQuery.
+### 1. The Problem
+Enterprises have massive existing investments in open-source data processing codebases: thousands of legacy Apache Spark jobs, PySpark ETL pipelines, Hive schemas, and custom machine learning libraries (GraphX, MLlib). Completely rewriting these workloads into Apache Beam or BigQuery SQL is prohibitively expensive, introduces business risk, and stalls migration timelines.
 
-### 2.1 Dataform Architecture & Core Concepts
+### 2. Understand the Concept
+**Managed Open-Source Big Data Processing** provides automated provisioning, configuration, and management of open-source frameworks (Spark, Hadoop, Hive, Presto/Trino, Flink). Rather than maintaining physical bare-metal Hadoop racks or configuring complex VM topologies manually, cloud platforms automate cluster spin-up, scaling, and teardown via APIs.
 
-Unlike legacy ETL tools that extract data to an external compute layer, Dataform compiles SQL and JavaScript into native BigQuery SQL execution graphs (DAGs).
+*Databricks Translation*: Cloud Dataproc corresponds to Databricks clusters running Apache Spark. Like Databricks, Dataproc supports interactive exploration, job submission, autoscaling, and serverless options. Crucially, Dataproc replaces Hadoop's native Distributed File System (HDFS) with the Cloud Storage Connector (`gs://`), decoupling compute from persistent storage.
+
+### 3. Google Cloud Implementation
+Google Cloud provides two distinct deployment models for Dataproc:
+1. **Dataproc on Compute Engine (GCE)**:
+   - Customer-provisioned VM clusters consisting of 1 Master node and $N$ Primary and Secondary worker nodes.
+   - **Ephemeral Cluster Pattern**: Clusters are provisioned on demand via Cloud Composer or CLI in 90 seconds, execute a batch Spark job, and are terminated immediately upon completion, eliminating idle infrastructure costs.
+   - **Initialization Actions**: Shell scripts executed during node provisioning to install OS packages, custom C/C++ libraries, Python wheels, or proprietary JDBC drivers.
+   - **Secondary Workers (Spot VMs)**: Secondary workers are compute-only nodes that do not run HDFS DataNode daemons. They run on Spot VMs at a **60% to 91% discount**, drastically reducing batch processing costs.
+2. **Dataproc Serverless for Spark**:
+   - Completely removes cluster management. Engineers submit PySpark scripts, Spark SQL, or Spark JARs directly to a Google Cloud region.
+   - Dataproc Serverless provisions containerized Spark runtimes, executes the job, autoscales dynamically in **Data Compute Units (DCUs)**, and terminates upon job exit.
 
 ```mermaid
-graph LR
-    subgraph Dataform Development Workflow
-        Git[Git Repository / GitHub] -->|Branch & PR| Workspace[Dataform Workspace]
-        Workspace --> Compiler[Dataform Compiler Engine]
-        Compiler --> ActionList[Execution Action List: Tables, Views, Assertions]
+graph TD
+    subgraph Dataproc_Cluster_Topology["Dataproc Cluster Topology (Compute Engine)"]
+        subgraph Master_Tier["Master Node (Persistent Standard VM)"]
+            Master[Master Node: YARN ResourceManager, HDFS NameNode]
+        end
+
+        subgraph Primary_Workers["Primary Worker Fleet (Standard VMs)"]
+            PW1[Primary Worker 1: NodeManager, HDFS DataNode]
+            PW2[Primary Worker 2: NodeManager, HDFS DataNode]
+        end
+
+        subgraph Secondary_Workers["Secondary Worker Fleet (Spot / Preemptible VMs: 60-91% Discount)"]
+            SW1[Secondary Worker 1: Compute-Only NodeManager]
+            SW2[Secondary Worker 2: Compute-Only NodeManager]
+            SW3[Secondary Worker 3: Compute-Only NodeManager]
+        end
     end
 
-    subgraph BigQuery Execution
-        ActionList -->|Step 1: Execute Table DDL| BQStaging[Build Temp Staging Tables]
-        ActionList -->|Step 2: Run Assertions| Assertions{Pass Quality Checks?}
-        Assertions -->|Fail| Abort[Abort Pipeline & Alert]
-        Assertions -->|Pass| BQProd[Execute Incremental MERGE into Gold]
+    Master --> PW1 & PW2
+    Master --> SW1 & SW2 & SW3
+
+    subgraph Decoupled_Storage_Tier["Decoupled Storage Tier"]
+        GCS_Data[Cloud Storage Lakehouse: gs://retailflow-lakehouse/]
+        BQ_Data[BigQuery Tables: lakehouse_silver]
     end
+
+    PW1 & PW2 & SW1 & SW2 & SW3 <==>|GCS Connector gs://| GCS_Data
+    PW1 & PW2 & SW1 & SW2 & SW3 <==>|BigQuery Spark Connector| BQ_Data
 ```
 
-* **SQLX**: An extension of standard SQL that incorporates declarative configuration blocks (`config {}`), pre- and post-processing operations, documentation, and data quality tests in a single file.
-* **Dependency Graphs**: Dataform automatically constructs the execution DAG by parsing the `ref('table_name')` function across models.
-* **Incremental Models**: Optimizes costs by executing partition-aware `MERGE` statements instead of rebuilding entire multi-terabyte tables on every run.
+### 4. How It Works (Components & Workflow)
+- **HDFS vs. Cloud Storage Connector**: In traditional Hadoop, jobs fail if worker VMs are terminated because data blocks reside on local HDFS disks. With the Cloud Storage Connector, Spark tasks read and write directly to `gs://` buckets. Persistent disks on Dataproc nodes are used strictly for local OS binaries and intermediate shuffle files.
+- **Graceful Decommissioning**: When Dataproc scales down or when a Spot VM receives a preemption notice, YARN's Graceful Decommissioning feature ensures that any in-flight Spark shuffle data is safely transferred to surviving primary nodes before the VM shuts down, preventing lost-executor shuffle fetch failures.
+- **BigQuery Spark Connector**: Allows Spark DataFrames to read directly from BigQuery tables using the BigQuery Storage Read API (delivering parallel, high-throughput gRPC columnar streams) and write back using the Storage Write API.
 
-### 2.2 Production Dataform SQLX Implementation
+### 5. Practical Example: RetailFlow PySpark Batch Job
+Below is the production PySpark batch script calculating rolling 7-day store inventory velocity, executed on Dataproc Serverless:
 
-Below is the production SQLX definition for `dim_customers_scd2`, implementing an incremental merge with data quality assertions.
+```python
+# File: inventory_velocity_batch.py
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
+
+def main():
+    spark = SparkSession.builder \
+        .appName("RetailFlow-InventoryVelocity") \
+        .config("spark.jars.packages", "com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.32.0") \
+        .getOrCreate()
+
+    # Step 1: Read directly from BigQuery Silver Fact Table using Storage Read API
+    orders_df = spark.read.format("bigquery") \
+        .option("table", "retailflow-prod.lakehouse_silver.orders_fact") \
+        .load()
+
+    # Step 2: Compute Rolling 7-day Sales Velocity per Store and SKU
+    window_spec = Window.partitionBy("store_id", "product_sku") \
+        .orderBy(F.col("order_timestamp").cast("long")) \
+        .rangeBetween(-7 * 86400, 0)
+
+    velocity_df = orders_df \
+        .filter(F.col("order_status") != "CANCELLED") \
+        .withColumn("rolling_7d_quantity", F.sum("item_quantity").over(window_spec)) \
+        .withColumn("rolling_7d_revenue", F.sum("net_amount").over(window_spec)) \
+        .groupBy("store_id", "product_sku") \
+        .agg(
+            F.max("rolling_7d_quantity").alias("units_sold_last_7d"),
+            F.max("rolling_7d_revenue").alias("revenue_last_7d")
+        )
+
+    # Step 3: Write results directly to GCS in optimized Parquet format
+    output_gcs_uri = "gs://retailflow-curated-marts/inventory_velocity/year=2026/month=05/"
+    velocity_df.write.mode("overwrite").parquet(output_gcs_uri)
+
+    spark.stop()
+
+if __name__ == "__main__":
+    main()
+```
+
+#### Submitting via Dataproc Serverless CLI
+```bash
+gcloud dataproc batches submit pyspark inventory_velocity_batch.py \
+    --project=retailflow-prod \
+    --region=us-central1 \
+    --version=2.1 \
+    --deps-bucket=gs://retailflow-dataproc-temp/ \
+    --service-account=dataproc-serverless-sa@retailflow-prod.iam.gserviceaccount.com \
+    --subnet=prod-analytics-subnet \
+    --properties="spark.executor.instances=10,spark.driver.cores=4"
+```
+
+### 6. Architecture Integration
+- **Upstream Sources**: Cloud Storage Parquet/ORC/Avro, BigQuery native tables (via Storage Read API), Cloud Spanner, on-premises HDFS.
+- **Orchestration**: Cloud Composer (Apache Airflow) using `DataprocCreateClusterOperator`, `DataprocSubmitJobOperator`, and `DataprocDeleteClusterOperator`.
+- **Downstream Sinks**: BigQuery analytical marts, Cloud Storage curated lakehouse, Cloud Bigtable (via Bigtable Spark connector).
+
+### 7. When to Use It
+- Migrating existing Apache Spark, Hadoop, Hive, or Presto codebases to Google Cloud with minimal code rewrites.
+- Machine learning featurization and distributed graph analytics requiring GraphX, Spark MLlib, or custom Scala JARs.
+- Batch workloads requiring custom OS-level C/C++ libraries or non-standard Linux drivers via initialization actions.
+
+### 8. When Not to Use It
+- Pure ANSI SQL transformations on BigQuery tables — use Dataform (zero cluster management, faster execution).
+- Low-latency real-time stream processing requiring event-time windowing, sessionization, and watermark handling — use Cloud Dataflow.
+- Simple file-to-table batch loading — use BigQuery Load jobs or BigQuery Data Transfer Service.
+
+### 9. Trade-offs (Performance, Cost, Complexity, Ops)
+- **Performance**: High distributed batch throughput; cluster initialization overhead is 90–180 seconds (GCE) or 30–60 seconds (Serverless).
+- **Cost**: Dataproc on GCE costs standard VM pricing plus a flat Dataproc fee of $0.01 per vCPU-hour. Using Spot VMs for secondary workers yields massive savings. Dataproc Serverless is billed per DCU-second.
+- **Complexity**: Requires knowledge of Spark internals (memory fractions, partitions, shuffles).
+- **Ops**: Ephemeral clusters eliminate long-term cluster maintenance. Dataproc Serverless eliminates VM management entirely.
+
+### 10. Common Misconceptions
+- *Misconception*: Dataproc clusters must be kept running 24/7 to retain data.  
+  **Reality**: Best practice is the **Ephemeral Cluster Pattern**. Data is persisted in Cloud Storage (`gs://`), meaning clusters are spun up to run a job and terminated immediately after.
+- *Misconception*: Secondary workers risk data loss if preempted by Google Cloud.  
+  **Reality**: Secondary workers do not run HDFS DataNodes; they are compute-only. If a Spot secondary worker is preempted, YARN simply reschedules the affected task on another worker.
+
+### 11. PDE Exam Perspective
+- **Exam Trigger Phrases**: *"Lift and shift existing Apache Spark / Hadoop pipelines with minimal code changes"* $\to$ **Cloud Dataproc**.
+- *"Optimize compute costs for recurring batch Spark jobs"* $\to$ **Ephemeral Dataproc cluster with Spot/Preemptible VMs for secondary workers**.
+- *"Run PySpark jobs without managing VM clusters"* $\to$ **Dataproc Serverless for Spark**.
+- *"Spark jobs failing due to HDFS disk exhaustion"* $\to$ Migrate storage from local HDFS to **Cloud Storage using the GCS connector**.
+
+---
+
+## 4. In-Warehouse ELT with Dataform
+
+Dataform provides a unified developer workflow for developing, testing, version-controlling, and scheduling SQL transformations directly inside BigQuery.
+
+### 4.1 Dataform Core Concepts
+- **SQLX**: An extension of ANSI SQL incorporating declarative configuration blocks (`config {}`), JavaScript helper functions, and built-in data quality tests.
+- **Automated DAG Generation**: Dataform parses `ref('table_name')` statements to dynamically construct the dependency graph across hundreds of models.
+- **Incremental Models**: Optimizes costs by executing partition-bounded `MERGE` statements instead of rebuilding entire multi-terabyte tables on every execution.
+
+### 4.2 Production Dataform SQLX Implementation
+Below is the production SQLX definition for `dim_customers_scd2`, implementing an incremental Slowly Changing Dimension Type 2 model with data quality assertions:
 
 ```sql
 -- File: definitions/marts/dim_customers_scd2.sqlx
@@ -91,324 +289,108 @@ config {
 
 pre_operations {
   -- Audit log start of execution
-  INSERT INTO `globalretailx-prod.audit_logs.pipeline_events` (event_name, execution_time)
+  INSERT INTO `retailflow-prod.audit_logs.pipeline_events` (event_name, execution_time)
   VALUES ('dim_customers_scd2_started', CURRENT_TIMESTAMP());
 }
 
 WITH source_data AS (
   SELECT
     customer_id,
-    TO_HEX(SHA256(LOWER(TRIM(email)))) AS email_hash,
+    TO_HEX(SHA256(email)) AS email_hash,
     loyalty_tier,
-    postal_code,
-    updated_at AS change_timestamp,
-    _metadata_deleted AS is_deleted
-  FROM
-    ${ref("stg_customers_cdc")}
-  ${when(incremental(), `WHERE updated_at > (SELECT MAX(effective_from) FROM ${self()})`)}
-),
-
-ranked_updates AS (
-  SELECT
-    *,
-    ROW_NUMBER() OVER (
-      PARTITION BY customer_id 
-      ORDER BY change_timestamp DESC
-    ) AS row_num
-  FROM
-    source_data
+    billing_country,
+    account_status,
+    TIMESTAMP_MICROS(_metadata_timestamp) AS effective_from
+  FROM ${ref("customers_cdc")}
+  ${when(incremental(), `WHERE _metadata_timestamp > (SELECT MAX(UNIX_MICROS(effective_from)) FROM ${self()})`)}
 )
 
 SELECT
   customer_id,
   email_hash,
   loyalty_tier,
-  postal_code,
-  change_timestamp AS effective_from,
-  LEAD(change_timestamp) OVER (
+  billing_country,
+  account_status,
+  effective_from,
+  LEAD(effective_from) OVER (
     PARTITION BY customer_id 
-    ORDER BY change_timestamp ASC
+    ORDER BY effective_from ASC
   ) AS effective_to,
   CASE 
-    WHEN LEAD(change_timestamp) OVER (PARTITION BY customer_id ORDER BY change_timestamp ASC) IS NULL 
-    THEN TRUE 
+    WHEN LEAD(effective_from) OVER (
+      PARTITION BY customer_id 
+      ORDER BY effective_from ASC
+    ) IS NULL THEN TRUE 
     ELSE FALSE 
   END AS is_current
-FROM
-  ranked_updates
-WHERE
-  row_num = 1 AND is_deleted IS FALSE
-
-post_operations {
-  -- Assert that no records have invalid date sequences
-  ASSERT NOT EXISTS (
-    SELECT 1 FROM ${self()} 
-    WHERE effective_to IS NOT NULL AND effective_to < effective_from
-  ) AS "Validation Error: effective_to cannot precede effective_from";
-}
+FROM source_data;
 ```
 
 ---
 
-## 3. Distributed Compute: Cloud Dataflow vs. Cloud Dataproc
+## 5. Active Learning: Architecture Prediction & Troubleshooting
 
-When transformations involve complex graph traversals, heavy matrix operations, or legacy distributed libraries, pure SQL in BigQuery becomes impractical. Engineers must choose between **Cloud Dataflow** and **Cloud Dataproc**.
+### Scenario A: Predict the Architecture
+**Business Challenge**:  
+RetailFlow’s supply chain engineering group has three distinct data transformation workloads that must be scheduled daily:
+1. **Workload 1 (SQL Marts)**: 45 analytical SQL queries that join staging tables to refresh sales reporting marts in BigQuery. The code is written in SQL and managed by analytics engineers.
+2. **Workload 2 (Graph Optimization)**: A complex graph traversal algorithm that optimizes multi-hop fulfillment warehouse routes across 850 retail stores. The codebase is written in Scala using Apache Spark GraphX and relies on custom compiled C++ routing libraries. It runs once a day for 40 minutes.
+3. **Workload 3 (PySpark Feature Engineering)**: A PySpark script that computes rolling 30-day customer affinity scores over 2 TB of Parquet files in Cloud Storage. The team wants zero cluster management overhead.
 
-```
-                        DISTRIBUTED COMPUTE DECISION MATRIX
-                        
-                                Workload Profile
-                                       |
-                +----------------------+----------------------+
-                |                                             |
-                v                                             v
-        Unified Streaming & Batch                      Legacy Hadoop / Spark
-        Java / Python / Go Pipelines                   Data Science / GraphX
-        Serverless Operations Only                     Custom OS / Native Libs
-                |                                             |
-                v                                             v
-        +---------------+                             +---------------+
-        | Cloud Dataflow|                             | Cloud Dataproc|
-        +---------------+                             +---------------+
-                                                              |
-                                               +--------------+--------------+
-                                               |                             |
-                                               v                             v
-                                     Serverless Spark Batches        Ephemeral Compute Engine
-                                     - No cluster management         - Fine-grained VM types
-                                     - Rapid startup (<60s)          - Spot/Preemptible VMs
-                                     - Pay strictly per job          - Custom initialization actions
-```
+**Task**: Choose the optimal Google Cloud compute engine for each workload.
 
-### 3.1 Architectural Comparison
-
-| Dimension | Cloud Dataflow | Cloud Dataproc (Compute Engine) | Dataproc Serverless |
-| :--- | :--- | :--- | :--- |
-| **Core Framework** | Apache Beam (Unified Model). | Apache Spark, Hadoop, Hive, Presto. | Apache Spark (2.x / 3.x). |
-| **Operational Model** | Fully Serverless. Auto-tunes worker count and memory dynamically. | Customer manages VM instances, master/worker nodes, and disk configurations. | Fully Serverless. Submit PySpark/Scala jobs directly without managing clusters. |
-| **Provisioning Time** | 2 to 4 minutes (VM spinning + container deploy). | 90 to 180 seconds for complete VM cluster initialization. | 30 to 60 seconds containerized startup. |
-| **Cost Optimization** | Streaming Engine offloads memory; Flexible Resource Scheduling (FlexRS) for 40% discount on non-urgent batch. | **Secondary Workers using Spot (Preemptible) VMs**. Primary masters stay persistent; workers scale to 0. | Billed in Data Compute Units (DCUs) strictly for the duration of execution. |
-| **Migration From Databricks**| High rewrite cost (must rewrite Spark pipelines into Apache Beam). | **Minimal rewrite**. Direct migration of PySpark and Spark SQL notebooks and scripts. | **Zero rewrite**. Submit existing PySpark scripts via `gcloud dataproc batches submit spark`. |
-
-### 3.2 Dataproc Best Practices: Ephemeral Clusters & Spot VMs
-
-For batch Spark workloads on Dataproc:
-1. **Never Run Persistent Clusters for Batch**: Running a long-lived Dataproc cluster 24/7 wastes thousands of dollars in idle VM compute. Provision an **Ephemeral Cluster** via Cloud Composer, execute the Spark job, and immediately terminate the cluster.
-2. **Graceful Decommissioning & Spot VMs**: Use a minimal master node (e.g., `n2-standard-4`), 2 standard worker nodes for HDFS quorum, and configure up to 50 **Secondary Workers using Spot VMs**. Spot VMs provide up to **60–91% savings**.
-3. **Cloud Storage Connector**: Configure Spark to read and write directly to `gs://` buckets using the Cloud Storage Connector, completely decoupling storage from cluster lifetimes.
-
-#### Production PySpark Batch Script on Dataproc Serverless
-```python
-# File: inventory_velocity_batch.py
-from pyspark.sql import SparkSession
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
-
-def main():
-    spark = SparkSession.builder \
-        .appName("GlobalRetailX-InventoryVelocity") \
-        .config("spark.jars.packages", "com.google.cloud.spark:spark-bigquery-with-dependencies_2.12:0.32.0") \
-        .getOrCreate()
-
-    # Step 1: Read directly from BigQuery Silver Fact Table
-    orders_df = spark.read.format("bigquery") \
-        .option("table", "globalretailx-prod.lakehouse_silver.orders_fact") \
-        .load()
-
-    # Step 2: Compute Rolling 7-day Sales Velocity per Store and SKU
-    window_spec = Window.partitionBy("store_id", "product_sku") \
-        .orderBy(F.col("order_timestamp").cast("long")) \
-        .rangeBetween(-7 * 86400, 0)
-
-    velocity_df = orders_df \
-        .filter(F.col("order_status") != "CANCELLED") \
-        .withColumn("rolling_7d_quantity", F.sum("item_quantity").over(window_spec)) \
-        .withColumn("rolling_7d_revenue", F.sum("net_amount").over(window_spec)) \
-        .groupBy("store_id", "product_sku") \
-        .agg(
-            F.max("rolling_7d_quantity").alias("units_sold_last_7d"),
-            F.max("rolling_7d_revenue").alias("revenue_last_7d")
-        )
-
-    # Step 3: Write results directly to GCS in optimized Parquet format
-    output_gcs_uri = "gs://globalretailx-curated-marts/inventory_velocity/year=2026/month=05/"
-    velocity_df.write.mode("overwrite").parquet(output_gcs_uri)
-
-    spark.stop()
-
-if __name__ == "__main__":
-    main()
-```
-
-#### Submitting via Dataproc Serverless
-```bash
-gcloud dataproc batches submit pyspark inventory_velocity_batch.py \
-    --project=globalretailx-prod \
-    --region=us-central1 \
-    --version=2.1 \
-    --deps-bucket=gs://globalretailx-dataproc-temp/ \
-    --service-account=dataproc-serverless-sa@globalretailx-prod.iam.gserviceaccount.com \
-    --subnet=prod-analytics-subnet
-```
+#### Architectural Solution & Reasoning:
+1. **Workload 1 $\to$ Dataform**: Declarative SQLX in-warehouse ELT. Executes natively in BigQuery using slots, manages table dependencies automatically, and requires zero cluster operations.
+2. **Workload 2 $\to$ Ephemeral Cloud Dataproc Cluster on Compute Engine**: GraphX requires full Apache Spark, and custom C++ libraries require an OS initialization action. Using an ephemeral cluster provisioned via Cloud Composer with Spot VMs for secondary workers ensures the cluster runs strictly for the 40-minute job and terminates immediately, minimizing cost.
+3. **Workload 3 $\to$ Dataproc Serverless for Spark**: Standard PySpark batch job without complex OS dependencies. Submitting via Dataproc Serverless eliminates cluster provisioning and VM configuration completely.
 
 ---
 
-## 4. BigQuery CDC MERGE & Deduplication Engine
+### Scenario B: Troubleshoot the Pipeline
+**Production Incident**:  
+At 04:30 AM, RetailFlow’s nightly 3-hour batch Spark job running on a Dataproc cluster fails with the following stack trace:
 
-When ingesting high-throughput relational data via Datastream CDC, BigQuery receives an append-only log of modifications containing multiple `INSERT`, `UPDATE`, and `DELETE` operations for the same primary key.
-
-### 4.1 Staging to Target CDC MERGE Architecture
-
-To reconstruct the accurate current state without locking production tables, an automated, two-step **Staging-and-Merge Pattern** is executed:
-
-```mermaid
-graph TD
-    subgraph Staging Layer
-        Datastream[Datastream CDC Stream] --> AppendOnlyTable[raw_cdc_staging.orders_cdc<br/>Contains Duplicates & Mutations]
-    end
-
-    subgraph Deduplication Query
-        AppendOnlyTable --> WindowRank[ROW_NUMBER() OVER<br/>PARTITION BY order_id<br/>ORDER BY _metadata_timestamp DESC]
-        WindowRank --> DedupView[Latest Valid Transaction State]
-    end
-
-    subgraph Production Silver Layer
-        DedupView --> MergeEngine{BigQuery MERGE Engine}
-        MergeEngine -->|Matched & is_deleted=TRUE| DeleteOp[DELETE row from Silver]
-        MergeEngine -->|Matched & is_deleted=FALSE| UpdateOp[UPDATE attributes in Silver]
-        MergeEngine -->|Not Matched & is_deleted=FALSE| InsertOp[INSERT new row into Silver]
-        DeleteOp & UpdateOp & InsertOp --> TargetTable[(lakehouse_silver.orders_fact)]
-    end
+```
+Spark Exception Snippet:
+org.apache.spark.shuffle.MetadataFetchFailedException: Missing an output location for shuffle 4
+    at org.apache.spark.MapOutputTracker$$anonfun$convertMapStatuses$1.apply(MapOutputTracker.scala:890)
+    ...
+Caused by: org.apache.spark.shuffle.FetchFailedException: Failed to connect to worker-secondary-042:7337
+    at org.apache.spark.storage.BlockManager.getRemoteBlock(BlockManager.scala:1120)
+ExecutorLostFailure (executor 18 exited, exit code 137 - VM preemption signal received)
 ```
 
-### 4.2 Production BigQuery CDC MERGE Statement
-
-```sql
-MERGE INTO `globalretailx-prod.lakehouse_silver.orders_fact` AS target
-USING (
-  WITH deduplicated_latest_cdc AS (
-    SELECT
-      order_id,
-      customer_id,
-      store_id,
-      fulfillment_region,
-      order_status,
-      gross_amount,
-      tax_amount,
-      net_amount,
-      _metadata_timestamp,
-      _metadata_change_type,
-      _metadata_deleted,
-      ROW_NUMBER() OVER (
-        PARTITION BY order_id 
-        ORDER BY _metadata_timestamp DESC, _metadata_read_timestamp DESC
-      ) AS rank_order
-    FROM
-      `globalretailx-prod.raw_cdc_staging.orders_cdc`
-    WHERE
-      -- Partition pruning: only read records landed in the last 24 hours
-      _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)
-  )
-  SELECT
-    order_id,
-    customer_id,
-    store_id,
-    fulfillment_region,
-    order_status,
-    gross_amount,
-    tax_amount,
-    net_amount,
-    _metadata_timestamp,
-    _metadata_deleted
-  FROM
-    deduplicated_latest_cdc
-  WHERE
-    rank_order = 1
-) AS source
-ON target.order_id = source.order_id 
-   AND target.fulfillment_region = source.fulfillment_region -- Clustering alignment
-
--- Condition 1: Record deleted at the source database
-WHEN MATCHED AND source._metadata_deleted = TRUE THEN
-  DELETE
-
--- Condition 2: Existing record updated with newer timestamp
-WHEN MATCHED AND source._metadata_deleted = FALSE 
-  AND source._metadata_timestamp > target._source_cdc_lsn THEN
-  UPDATE SET
-    target.customer_id = source.customer_id,
-    target.store_id = source.store_id,
-    target.order_status = source.order_status,
-    target.gross_amount = source.gross_amount,
-    target.tax_amount = source.tax_amount,
-    target.net_amount = source.net_amount,
-    target._source_cdc_lsn = source._metadata_timestamp,
-    target._ingest_time = CURRENT_TIMESTAMP()
-
--- Condition 3: Brand new transaction record
-WHEN NOT MATCHED AND source._metadata_deleted = FALSE THEN
-  INSERT (
-    order_id,
-    order_timestamp,
-    customer_id,
-    store_id,
-    fulfillment_region,
-    order_status,
-    gross_amount,
-    tax_amount,
-    net_amount,
-    _source_cdc_lsn,
-    _ingest_time
-  )
-  VALUES (
-    source.order_id,
-    TIMESTAMP_MICROS(source._metadata_timestamp),
-    source.customer_id,
-    source.store_id,
-    source.fulfillment_region,
-    source.order_status,
-    source.gross_amount,
-    source.tax_amount,
-    source.net_amount,
-    source._metadata_timestamp,
-    CURRENT_TIMESTAMP()
-  );
-```
-
-### 4.3 Handling Schema Drift and Type Coercion
-
-Relational databases undergo routine schema evolution (e.g., adding `discount_code` or modifying numeric precision).
-* **Safe Evolutions**: Datastream and BigQuery natively handle column additions (`ALTER TABLE ADD COLUMN`). BigQuery marks historical rows for the new column as `NULL`.
-* **Breaking Evolutions**: Modifying column types (e.g., `INT32` to `STRING`) requires **Type Coercion Staging Views**:
-  1. Staging tables ingest raw inputs as flexible types (e.g., `JSON` or `STRING`).
-  2. A typed view explicitly applies `SAFE_CAST(column AS TARGET_TYPE)`. If coercion fails, `SAFE_CAST` returns `NULL` rather than failing the entire ELT job.
-  3. Dataform assertions flag non-null violations, quarantining incompatible records.
-
----
-
-## 5. Failure Modes, Resource Contention & Retry Semantics
-
-| Failure Scenario | Underlying Mechanism | Operational Manifestation | Engineering Mitigation |
-| :--- | :--- | :--- | :--- |
-| **Concurrent MERGE Mutations** | Multiple pipelines or Datastream micro-batches execute concurrent `MERGE` statements on the same target partition. | Query fails with: `Transaction was aborted due to concurrent update against table...`. | 1. Ensure staging micro-batches are processed serially via Composer or Cloud Tasks.<br>2. Partition target table finely (daily); BigQuery acquires locks at the **partition level**, allowing concurrent merges into disjoint partitions. |
-| **Spot VM Preemption Storm** | GCP reclaims Dataproc Spot VMs during a cluster-wide high-priority workload demand spike. | Spark driver reports lost executors; shuffle fetch failures; pipeline execution slows or fails. | 1. Never configure primary master nodes as Spot/Preemptible.<br>2. Restrict Spot VMs to Secondary Workers.<br>3. Enable Spark dynamic allocation and set `spark.blacklist.enabled=true` to isolate repeatedly preempted hosts. |
-| **Dataform Assertion Failure** | A supplier feed uploads orders with null `customer_id` or duplicate `order_id` primary keys. | Dataform DAG execution terminates at step 2. Gold models are not refreshed. | Configure Dataform assertions with non-blocking warning thresholds (`threshold: 10`) for non-critical assertions, or route failing records into a quarantine table while allowing the core pipeline to proceed. |
-| **Dremel Slot Starvation during ELT** | Massive unpartitioned joins consume all available reservation slots; Looker executive dashboards stall. | Query queued; slot wait time climbs from 0ms to >120,000ms. | 1. Separate ELT batch workloads from BI reporting workloads using **BigQuery Slot Reservations** and workload assignments (`default` vs `batch_pipeline`).<br>2. Enforce `require_partition_filter = true`. |
+#### Diagnostic Walkthrough:
+1. **Identify the Symptom**: The Spark driver reports `FetchFailedException` and `MetadataFetchFailedException` because worker `worker-secondary-042` disappeared, causing the entire job to fail.
+2. **Root Cause Analysis**: The cluster was configured with 40 Secondary Workers running on **Spot (Preemptible) VMs**. During peak demand, Google Cloud reclaimed multiple Spot VMs simultaneously (a Preemption Storm). Because **Graceful Decommissioning** was not enabled on Dataproc, the preempted worker was shut down before its local shuffle files could be replicated to surviving primary workers, causing a fatal shuffle fetch failure.
+3. **Remediation Protocol**:
+   - *Fix 1 (Enable Graceful Decommissioning)*: Update cluster configuration to enable YARN graceful decommissioning with a timeout:
+     ```bash
+     --properties="yarn:yarn.resourcemanager.decommissioning-nodes-watcher.poll-interval-ms=1000,dataproc:dataproc.decommissioning.graceful.timeout=600s"
+     ```
+     This allows preempted workers up to 10 minutes to migrate in-flight shuffle outputs to surviving primary nodes.
+   - *Fix 2 (Primary Worker Baseline)*: Ensure that at least 25% to 30% of cluster workers are configured as **Standard (Non-preemptible) Primary Workers** to maintain quorum and host critical HDFS/YARN tasks.
+   - *Fix 3 (Spark Dynamic Allocation)*: Enable `spark.dynamicAllocation.enabled=true` and configure Spark node blacklisting: `spark.blacklist.enabled=true` so the driver temporarily avoids scheduling stages on unstable Spot VM hosts.
 
 ---
 
 ## 6. Professional Data Engineer (PDE) Knowledge Check
 
 #### Question 1
-GlobalRetailX ingests continuous Change Data Capture (CDC) events into an append-only BigQuery staging table. Every 15 minutes, a scheduled query runs a `MERGE` statement into the production fact table. Over time, the cost of the `MERGE` query has escalated significantly, and queries occasionally fail due to concurrent update conflicts. How should you optimize this architecture?
+RetailFlow ingests continuous Change Data Capture (CDC) events into an append-only BigQuery staging table. Every 15 minutes, a scheduled query runs a `MERGE` statement into the production fact table. Over time, the cost of the `MERGE` query has escalated significantly, and queries occasionally fail due to concurrent update conflicts. How should you optimize this architecture?
 
 - A. Execute a full table replacement (`CREATE OR REPLACE TABLE`) instead of using `MERGE`.
 - B. Ensure the target table is partitioned by date and clustered on the primary entity keys. In the `MERGE` statement, restrict the source and target scans to only the recent partitions (e.g., `_PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 24 HOUR)`), and co-align clustering keys in the join condition.
 - C. Switch from BigQuery to Cloud SQL for analytical transformations.
 - D. Disable clustering on the production table so writes do not perform block sorting.
 
-**Answer: B**
-*Explanation*: BigQuery `MERGE` statements can scan petabytes of data if left unconstrained. Restricting both the source CDC table and the target fact table to recent partitions (`_PARTITIONTIME >= ...`) ensures partition pruning, dramatically reducing scanned bytes and cost. Aligning clustering keys in the join predicate allows Dremel to skip irrelevant Capacitor blocks. Furthermore, BigQuery locks tables at the partition level during mutations; partition-bounded merges reduce concurrent transaction conflicts. Option A dramatically increases costs by rebuilding historical data. Option C degrades analytical scale. Option D worsens scan efficiency.
+**Answer: B**  
+*Detailed Answer Analysis*:
+* **Correct Answer: B**. BigQuery `MERGE` statements can scan petabytes of data if left unconstrained. Restricting both the source CDC table and the target fact table to recent partitions (`_PARTITIONTIME >= ...`) ensures partition pruning, dramatically reducing scanned bytes and cost. Aligning clustering keys in the join predicate allows Dremel to skip irrelevant Capacitor blocks. Furthermore, BigQuery locks tables at the partition level during mutations; partition-bounded merges reduce concurrent transaction conflicts.
+* *Distractor Analysis*:
+  * **A** is incorrect because rebuilding the entire table via `CREATE OR REPLACE TABLE` drastically inflates compute costs and disrupts concurrent read queries.
+  * **C** is incorrect because Cloud SQL is an OLTP database that cannot scale to petabyte-scale analytical queries or high-volume CDC transformations.
+  * **D** is incorrect because disabling clustering degrades scan performance and prevents Capacitor block-level pruning.
 
 ---
 
@@ -420,8 +402,13 @@ Your team is migrating an existing, highly optimized Apache Spark graph-processi
 - C. An ephemeral Cloud Dataproc cluster provisioned via Cloud Composer with an initialization action script to install the C++ libraries, using Spot VMs for secondary workers, and terminated immediately upon job completion.
 - D. Cloud Run with maximum CPU allocation.
 
-**Answer: C**
-*Explanation*: Ephemeral Dataproc clusters are the gold standard for recurring batch Spark jobs. Provisioning the cluster on-demand and tearing it down after 45 minutes avoids paying for idle compute. Initialization actions cleanly automate OS-level C++ library dependencies. Using Spot (Preemptible) VMs for secondary workers achieves up to 91% compute cost reductions. Option A wastes money running idle VMs. Option B requires a costly, complex pipeline rewrite. Option D cannot scale to distributed multi-node Spark graph workloads.
+**Answer: C**  
+*Detailed Answer Analysis*:
+* **Correct Answer: C**. Ephemeral Dataproc clusters are the gold standard for recurring batch Spark jobs. Provisioning the cluster on-demand and tearing it down after 45 minutes avoids paying for idle compute. Initialization actions cleanly automate OS-level C++ library dependencies. Using Spot (Preemptible) VMs for secondary workers achieves up to 91% compute cost reductions without data loss risk.
+* *Distractor Analysis*:
+  * **A** is incorrect because running a permanent 24/7 cluster wastes substantial budget on 23+ hours of idle compute and persistent disk charges daily.
+  * **B** is incorrect because rewriting complex Spark and C++ libraries into Apache Beam requires months of costly engineering effort when Dataproc runs native Spark out of the box.
+  * **D** is incorrect because Cloud Run is a containerized microservice platform designed for HTTP/gRPC requests, not distributed multi-node Spark graph analytics.
 
 ---
 
@@ -433,5 +420,22 @@ You are developing transformation models in Dataform. You have an incremental mo
 - C. Edit the SQLX config to `type: "table"`, deploy to production, and edit it back to `incremental`.
 - D. Dataform does not support backfilling incremental models; you must export data to Cloud Storage and reload.
 
-**Answer: B**
-*Explanation*: Dataform provides the `--full-refresh` command-line / API option for incremental models, which instructs the compiler to ignore the incremental logic and rebuild the entire table. Alternatively, for surgical backfills of specific partitions, engineers execute a targeted backfill script filtering for the damaged partition range. Option A causes catastrophic downtime for downstream dashboards. Option C is error-prone, risky, and alters version-controlled code for a transient data repair.
+**Answer: B**  
+*Detailed Answer Analysis*:
+* **Correct Answer: B**. Dataform provides the `--full-refresh` command-line / API option for incremental models, which instructs the compiler to ignore the incremental logic and rebuild the entire table. Alternatively, for surgical backfills of specific partitions, engineers execute a targeted backfill script filtering for the damaged partition range without touching valid historical data.
+* *Distractor Analysis*:
+  * **A** is incorrect because deleting production tables causes severe downtime for downstream dashboards, drops metadata/IAM tags, and is unnecessarily destructive.
+  * **C** is incorrect because temporarily editing production SQLX configs to `type: "table"` alters version-controlled definitions for an operational repair and is highly error-prone.
+  * **D** is incorrect because Dataform natively supports full refreshes and partition-targeted executions; exporting to Cloud Storage is an unnecessary and slow workaround.
+
+---
+
+## Module Key Takeaways & Exam Traps
+
+| Category | Golden Rule | Exam Trap to Avoid |
+| :--- | :--- | :--- |
+| **Dataproc Ephemeral Clusters** | Provision clusters on-demand for batch jobs and terminate immediately upon completion to avoid idle VM costs. | Never keep 24/7 Dataproc clusters running for recurring daily batch jobs. |
+| **Dataproc Spot VMs** | Configure Secondary Workers as Spot VMs (60–91% savings). Secondary workers are compute-only and do not host HDFS DataNodes. | Master nodes and primary workers must never be Spot VMs to avoid losing cluster quorum. |
+| **GCS Connector** | Replace local HDFS with the Cloud Storage connector (`gs://`) to decouple storage from cluster lifetimes. | Never persist production data on Dataproc local disks; local disks are strictly for OS and shuffle files. |
+| **Dataproc Serverless** | Use Dataproc Serverless for standard PySpark/Spark SQL batch jobs where cluster management is unwanted. | If a workload requires custom OS packages, C++ dependencies, or non-Spark frameworks (Flink/Presto), use Dataproc on GCE. |
+| **Dataform vs Compute Engines** | Use Dataform for in-warehouse SQL transformations in BigQuery; reserve Dataproc/Dataflow for non-SQL or complex ML/graph tasks. | Never extract BigQuery data out to external Spark clusters just to run simple SQL joins and aggregations. |

@@ -72,6 +72,9 @@ gcloud storage buckets update gs://globalretailx-bronze-landing \
 
 BigQuery supports cross-region dataset replication, establishing a live, continuous replica of a primary dataset in a secondary region.
 
+> [!IMPORTANT]
+> **Edition Requirement**: Cross-region disaster recovery replication (including promotion and failover) is available exclusively in **BigQuery Enterprise Plus Edition**. Standard and Enterprise editions do not support cross-region disaster recovery replication.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -326,15 +329,20 @@ gcloud pubsub subscriptions seek clickstream-dataflow-sub \
 ## 7. Professional Data Engineer (PDE) Knowledge Check
 
 #### Question 1
-GlobalRetailX maintains a mission-critical BigQuery dataset in `us-central1` that drives real-time retail store replenishment. Enterprise risk policy mandates an RTO < 30 minutes and RPO < 15 minutes in the event of a total regional disaster. The architecture must allow automated cross-region replication while allowing local reporting teams to query data in the secondary region without impacting production write workloads. How should you configure BigQuery?
+RetailFlow maintains a mission-critical BigQuery dataset in `us-central1` that drives real-time retail store replenishment. Enterprise risk policy mandates an RTO < 30 minutes and RPO < 15 minutes in the event of a total regional disaster. The architecture must allow automated cross-region replication while allowing local reporting teams to query data in the secondary region without impacting production write workloads. How should you configure BigQuery?
 
 - A. Export the tables to Cloud Storage nightly and run a Storage Transfer Service job to `us-east4`.
-- B. Enroll in BigQuery Enterprise or Enterprise Plus Edition. Create a cross-region dataset replica in `us-east4`. In the event of a regional outage in `us-central1`, issue an `ALTER SCHEMA` command promoting the `us-east4` replica to primary.
+- B. Enroll in BigQuery Enterprise Plus Edition. Create a cross-region dataset replica in `us-east4`. In the event of a regional outage in `us-central1`, issue an `ALTER SCHEMA` command promoting the `us-east4` replica to primary.
 - C. Use Cloud Composer to run a federated query every 10 minutes copying data from `us-central1` to `us-east4`.
 - D. BigQuery natively handles cross-region failover across all regions automatically with zero configuration.
 
 **Answer: B**
-*Explanation*: BigQuery cross-region dataset replication (available in Enterprise and Enterprise Plus Editions) continuously replicates data and metadata asynchronously to a secondary region. The secondary replica is immediately readable for local analytical queries. In a disaster event where the primary region becomes unavailable, promoting the secondary replica via `ALTER SCHEMA ... SET OPTIONS(primary_replica='...')` accomplishes failover with an RTO of minutes and an RPO within the asynchronous replication window (<15 minutes). Option A fails the RPO and RTO SLAs. Option C creates massive query costs and maintenance overhead. Option D is factually incorrect.
+*Detailed Answer Analysis*:
+* **Correct Answer: B**. BigQuery cross-region dataset disaster recovery replication (available exclusively in **Enterprise Plus Edition**) continuously replicates data and metadata asynchronously to a secondary region. The secondary replica is immediately readable for local analytical queries. In a disaster event where the primary region becomes unavailable, promoting the secondary replica via `ALTER SCHEMA ... SET OPTIONS(primary_replica='...')` accomplishes failover with an RTO of minutes and an RPO within the asynchronous replication window (<15 minutes).
+* *Distractor Analysis*:
+  * **A** is incorrect because nightly exports and transfers produce an RPO of up to 24 hours, completely violating the strict 15-minute RPO requirement.
+  * **C** is incorrect because scheduled federated queries incur massive cross-region egress costs, query compute slot contention, and lack transactional failover management.
+  * **D** is incorrect because BigQuery does not automatically fail over datasets cross-region without configuring Enterprise Plus cross-region dataset replication.
 
 ---
 
@@ -347,7 +355,12 @@ At 02:00 PM, a data engineer accidentally deploys an untested Dataform script th
 - D. Run an `UNDO UPDATE` SQL command.
 
 **Answer: C**
-*Explanation*: BigQuery Time Travel preserves historical row states for up to 7 days. Because the corruption was identified 1.5 hours after the incident, the original data is easily accessible using the `FOR SYSTEM_TIME AS OF` clause or the `bq cp` CLI command with a timestamp decorator. This operation completes in seconds without restoring from external backups or replaying pipelines. Option B is unnecessary because the data is well within the 7-day Time Travel window (Fail-safe is only needed after Time Travel expires). Option D does not exist in BigQuery SQL.
+*Detailed Answer Analysis*:
+* **Correct Answer: C**. BigQuery Time Travel preserves historical row states for up to 7 days. Because the corruption was identified 1.5 hours after the incident, the original data is easily accessible using the `FOR SYSTEM_TIME AS OF` clause or the `bq cp` CLI command with a timestamp decorator. This operation completes in seconds without restoring from external backups or replaying pipelines.
+* *Distractor Analysis*:
+  * **A** is incorrect because restoring from nightly backups requires hours of pipeline replay, introduces data loss for valid mid-day transactions, and incurs unnecessary compute spend.
+  * **B** is incorrect because Fail-safe recovery is a Google Cloud Support mechanism used only after the 7-day Time Travel window has expired.
+  * **D** is incorrect because SQL has no `UNDO UPDATE` command in BigQuery.
 
 ---
 
@@ -360,4 +373,9 @@ Your organization is migrating to BigQuery Editions to gain predictable billing.
 - D. Configure Cloud Composer to delete and recreate BigQuery projects twice daily.
 
 **Answer: B**
-*Explanation*: BigQuery Enterprise Edition slot reservations with autoscaling provide optimal elasticity and cost governance. Setting `ignore_idle_slots = false` enables the BigQuery Fair-Share scheduler: when the BI reservation is inactive at night, the batch ELT reservation can automatically consume its idle slots for free. During the day, if the BI reservation requires capacity, BigQuery instantly reclaims those slots. Autoscaling ensures burst capacity is provisioned only when queued query pressure demands it, scaling back down to baseline during quiet hours.
+*Detailed Answer Analysis*:
+* **Correct Answer: B**. BigQuery Enterprise Edition slot reservations with autoscaling provide optimal elasticity and cost governance. Setting `ignore_idle_slots = false` enables the BigQuery Fair-Share scheduler: when the BI reservation is inactive at night, the batch ELT reservation can automatically consume its idle slots for free. During the day, if the BI reservation requires capacity, BigQuery instantly reclaims those slots. Autoscaling ensures burst capacity is provisioned only when queued query pressure demands it, scaling back down to baseline during quiet hours.
+* *Distractor Analysis*:
+  * **A** is incorrect because purchasing 4,000 baseline committed slots forces the enterprise to pay for 4,000 slots 24/7, even during off-peak hours when utilization is near zero.
+  * **C** is incorrect because On-Demand billing charges per TB scanned ($6.25/TB) with a default concurrency cap of 2,000 slots, providing zero cost predictability for unpredictable batch scans.
+  * **D** is incorrect because deleting and recreating projects is an operational anti-pattern that destroys IAM bindings, audit logs, and table configurations.

@@ -63,7 +63,8 @@ flowchart TD
 - **Regional ACID Transactions (Up to 64 TB)**: AlloyDB for PostgreSQL, Cloud SQL.
 - **Document-Level ACID Transactions**: Firestore.
 - **Analytical Read Consistency (Point-in-time snapshot isolation)**: BigQuery (supports multi-statement transactions, but optimized for appends/merges, not OLTP).
-- **Eventual Consistency**: Cloud Storage across remote regions, Pub/Sub message delivery order (unless ordering keys are explicitly configured).
+- **Strong Global Consistency (Object Operations)**: Cloud Storage guarantees strong global consistency for all object uploads, overwrites, deletes, and bucket/object metadata listings across all locations (regional, dual-region, and multi-region). Once a write is acknowledged, any subsequent read or list operation immediately reflects the mutation.
+- **Eventual Consistency Systems**: Cloud Bigtable multi-cluster replication (replication across remote clusters is asynchronous and eventually consistent); Datastream CDC replication lag; and IAM policy propagation delays across global control planes.
 
 ### Vector 5: Operational Burden (The "No-Ops" Rule)
 Google Cloud has a strong philosophical bias toward **Serverless**:

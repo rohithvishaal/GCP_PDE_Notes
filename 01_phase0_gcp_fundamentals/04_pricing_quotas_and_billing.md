@@ -112,7 +112,7 @@ graph TD
 
 ### 3.1 On-Demand Pricing
 - **Cost**: Based purely on the number of bytes scanned by the query (typically \$6.25 per TB).
-- **Slot Bursting**: Queries share a multi-tenant pool that can dynamically burst up to 2,000 slots per project.
+- **Slot Bursting**: Queries share a multi-tenant pool that dynamically bursts up to 2,000 slots per project by default in on-demand mode (can be increased via quota request or bypassed entirely using BigQuery Editions reservations).
 - **Risk**: A developer writing `SELECT * FROM unpartitioned_table` scanning 100 TB costs \$625 for a single query.
 - **Cost Defense**: Use `maximum_bytes_billed` in query options to automatically fail queries that exceed a safety threshold.
 
@@ -211,7 +211,7 @@ To prevent runaway billing in production, implement these four structural defens
 
 ### Critical Distinction: Budgets vs. Quotas
 - **Budgets**: Financial monitoring tools that track spend against an alert threshold (e.g., 50%, 90%, 100%). **Budgets DO NOT stop spending or disable resources by default.** To stop spend, you must write custom automation (Pub/Sub $\to$ Cloud Function $\to$ disable billing).
-- **Quotas**: Operational constraints enforced by Google to prevent accidental resource exhaustion or malicious abuse (e.g., maximum 2,000 BigQuery slots per project, 100 Compute Engine vCPUs per region). **Quotas cap resource quantity or rate, but do NOT track dollars.**
+- **Quotas**: Operational constraints enforced by Google to prevent accidental resource exhaustion or malicious abuse (e.g., default 2,000 BigQuery on-demand slots per project, 100 Compute Engine vCPUs per region). **Quotas cap resource quantity or rate, but do NOT track dollars.**
 
 ### BigQuery Job Execution: Interactive vs. Batch
 - **Interactive Queries (Default)**: Executed immediately. Counted against concurrent query limits. Billed normally.
