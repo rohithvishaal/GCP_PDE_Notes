@@ -143,12 +143,17 @@ INTERLEAVE IN PARENT Customers ON DELETE CASCADE;
 *   **Datastore Mode**: For legacy App Engine backends or high-throughput server-side batch operations requiring high write scalability without real-time listeners.
 
 #### Cloud Memorystore
-*   **Memorystore for Redis**:
-    *   *Basic Tier*: Single-zone, non-HA, zero replication. Cache is completely lost if the VM fails. Suitable only for development or disposable caches.
-    *   *Standard Tier*: Cross-zone active-standby replica with automated failover in $<30$ seconds. Supports up to 5 read replicas.
-    *   *Cluster Mode*: Enables horizontal keyspace sharding across up to 250 shards for multi-terabyte caches delivering tens of millions of ops/sec.
-    *   *Persistence*: Supports RDB periodic snapshots and AOF (Append-Only File) logging.
-*   **Memorystore for Memcached**: Multi-threaded, simple key-value caching without advanced Redis data structures or persistence.
+*   **Memorystore for Redis (Instance-Based Standalone)**:
+    *   *Basic Tier*: Single-zone, non-HA, zero replication. Cache is completely lost if the host fails or during maintenance. Does not support automated persistence (AOF/RDB) or read replicas. Suitable only for development or disposable compute caches.
+    *   *Standard Tier (High Availability)*: Cross-zone primary and replica pair with automatic failover in $<30$ seconds and connection IP preservation. Optionally supports up to 5 read replicas to offload read queries. Supports persistence via RDB periodic snapshots (to Cloud Storage) and AOF (Append-Only File) logging. Bounded by a maximum single-instance capacity of 300 GB (no keyspace sharding).
+*   **Memorystore for Redis Cluster (Horizontally Scalable)**:
+    *   *Architecture*: Separate, horizontally partitioned offering compliant with the open-source Redis Cluster protocol. Shards keyspace across 16,384 hash slots, scaling from tens of gigabytes to multiple terabytes with tens of millions of QPS.
+    *   *Sharding & Quota Limits*: Governed by a total node ceiling of 250 nodes per cluster. Maximum shard count depends directly on the replica configuration per shard:
+        *   **0 replicas per shard**: Up to 250 primary shards.
+        *   **1 replica per shard (HA default)**: Up to 125 shards (125 primaries + 125 replicas = 250 nodes).
+        *   **2 replicas per shard**: Up to 83 shards (83 primaries + 166 replicas = 249 nodes).
+    *   *High Availability & Persistence*: Independent automated failover per shard; supports automated daily RDB backups to Cloud Storage and AOF persistence. Requires cluster-aware Redis clients.
+*   **Memorystore for Memcached**: Multi-threaded, simple in-memory key-value caching without advanced Redis data structures, cluster partitioning, or persistence.
 
 ---
 
@@ -228,8 +233,12 @@ Cloud Storage provides a flat namespace with **Global Strong Consistency** for a
 > **Early Deletion Financial Penalty Trap**: If an object stored in Coldline is deleted, rewritten, or transitioned to Archive after only 25 days, Google Cloud bills you for the remaining **65 days** of Coldline storage as an early deletion penalty.
 
 ### 3. Object Lifecycle Management vs. Autoclass
-*   **Object Lifecycle Management (OLM)**: Declarative rules defined on buckets (e.g., transition to Nearline after 30 days of inactivity, delete after 365 days). Requires predicting access patterns.
-*   **Autoclass**: Completely automates transitions between Standard, Nearline, Coldline, and Archive based on individual object access patterns. Eliminates retrieval fees and manual lifecycle policy maintenance. Charges a small monthly management fee per 1,000 objects.
+*   **Object Lifecycle Management (OLM)**: Declarative rules defined on buckets (e.g., transition to Nearline after 30 days of inactivity, delete after 365 days). Requires predicting access patterns. Subject to early deletion penalties if objects are deleted or modified prior to minimum duration thresholds.
+*   **Autoclass**: Completely automates transitions between Standard, Nearline, Coldline, and Archive based on individual object access patterns.
+    *   *Fee Structure*:
+        *   **Applicable One-Time Enablement Charge**: Incurred when enabling Autoclass on an existing bucket containing objects (billed per 100,000 existing objects evaluated). Enabling Autoclass on a newly created empty bucket incurs zero enablement fee.
+        *   **Ongoing Monthly Management Fee**: Billed per 100,000 stored objects under management.
+        *   **Zero Retrieval & Early-Deletion Charges**: Objects transitioned across classes by Autoclass **never incur data retrieval charges or early-deletion penalties**, insulating the architecture from unexpected financial spikes when cold data is accessed.
 
 ### 4. Data Lake Access Controls & WORM Compliance
 *   **Uniform Bucket-Level Access (UBLA)**: Enforces unified IAM permissions across all objects in a bucket, disabling legacy object ACLs for audit compliance.

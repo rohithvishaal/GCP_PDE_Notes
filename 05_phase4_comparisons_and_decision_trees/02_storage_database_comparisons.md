@@ -91,16 +91,23 @@ flowchart LR
     WriteCache --> Return
 ```
 
-#### Memorystore for Redis Tiers & Production Selection:
-*   **Basic Tier (Non-HA)**: A single Redis node residing in one zone. Zero replication, no automated failover. If the host fails or maintenance occurs, all cache data is lost. Suitable strictly for ephemeral development caches or disposable compute caches.
-*   **Standard Tier (High Availability)**: Cross-zone active-standby replica pair. Automatic cross-zone failover completes in $<30$ seconds with persistent internal IP address preservation. Supports up to 5 read replicas to offload read traffic.
-*   **Cluster Mode**: Enables horizontal keyspace sharding across up to 250 shards for multi-terabyte caches delivering tens of millions of operations per second with microsecond latency.
-*   **Persistence Options**: Supports RDB (periodic snapshot dumps to Cloud Storage) and AOF (Append-Only File logging for minimal RPO recovery).
+#### Memorystore Offerings & Architectural Selection:
+*   **Memorystore for Redis (Standalone Instance)**:
+    *   *Basic Tier (Non-HA)*: A single Redis node residing in one zone. Zero replication, no automated failover. If the host fails or maintenance occurs, all cache data is lost. Does not support automated persistence (AOF/RDB) or read replicas. Suitable strictly for ephemeral development caches or disposable compute caches.
+    *   *Standard Tier (High Availability)*: Cross-zone active-standby replica pair. Automatic cross-zone failover completes in $<30$ seconds with persistent internal IP address preservation. Supports up to 5 read replicas to offload read traffic. Maximum capacity is 300 GB (no keyspace sharding). Supports persistence via RDB periodic snapshots (to Cloud Storage) and AOF logging.
+*   **Memorystore for Redis Cluster (Horizontally Scalable)**:
+    *   *Architecture*: Separate, horizontally partitioned offering compliant with the open-source Redis Cluster protocol. Shards keyspace across 16,384 hash slots, scaling from tens of gigabytes to multiple terabytes with tens of millions of QPS.
+    *   *Capacity & Node Limits*: Governed by a total node ceiling of 250 nodes per cluster. Maximum shard count depends directly on the replica configuration per shard:
+        *   **0 replicas per shard**: Up to 250 primary shards.
+        *   **1 replica per shard (HA default)**: Up to 125 shards (125 primaries + 125 replicas = 250 nodes).
+        *   **2 replicas per shard**: Up to 83 shards (83 primaries + 166 replicas = 249 nodes).
+    *   *Failover & Persistence*: Independent automated failover per shard. Supports automated daily RDB backups to Cloud Storage and AOF persistence. Requires cluster-aware Redis clients.
+*   **Memorystore for Memcached**: Multi-threaded in-memory key-value caching without advanced Redis data structures, cluster partitioning, or persistence.
 
 ---
 
 ### Cloud SQL vs. AlloyDB: Traditional vs. Cloud-Native Relational
-*   **Cloud SQL**: Best for general-purpose relational workloads (<64 TB) migrating from existing MySQL, PostgreSQL, or SQL Server instances. Regional HA provides automatic failover in $<60$ seconds using synchronous disk replication.
+*   **Cloud SQL**: Best for general-purpose relational workloads (<64 TB) migrating from existing MySQL, PostgreSQL, or SQL Server instances. Regional HA provides automatic failover in approximately 60 seconds (duration is environment-dependent based on transaction volume and crash recovery) using synchronous disk replication.
 *   **AlloyDB for PostgreSQL**: Re-architects PostgreSQL with a disaggregated compute/storage engine and an analytical columnar engine. Delivers up to $4\times$ transactional write throughput and up to $100\times$ faster analytical queries compared to standard PostgreSQL, making it the premier choice for demanding HTAP workloads.
 
 ---
@@ -115,7 +122,7 @@ flowchart TD
     Q1 -->|Unstructured: Images, Audio, Raw Blobs, Backups| Sol_GCS[Cloud Storage - GCS<br/>- Multi-regional / Regional / Dual-Region<br/>- Storage Classes: Standard, Nearline, Coldline, Archive<br/>- Autoclass for automated lifecycle]
     
     %% IN-MEMORY CACHE
-    Q1 -->|Sub-millisecond latency cache / Session state| Sol_Memorystore[Cloud Memorystore for Redis<br/>- Sub-millisecond reads/writes<br/>- Standard Tier cross-zone HA < 30s failover<br/>- Cluster mode horizontal sharding up to 250 shards]
+    Q1 -->|Sub-millisecond latency cache / Session state| Sol_Memorystore[Cloud Memorystore<br/>- Sub-millisecond reads/writes<br/>- Standalone Standard: Cross-zone HA < 30s<br/>- Redis Cluster: Horizontal sharding up to 250 nodes]
 
     %% SEMI-STRUCTURED / DOCUMENT
     Q1 -->|Semi-Structured: Hierarchical JSON, App State| Q2{Need client/mobile offline sync<br/>or real-time state listeners?}

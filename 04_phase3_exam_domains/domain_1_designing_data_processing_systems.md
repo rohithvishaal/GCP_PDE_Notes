@@ -356,9 +356,12 @@ $$\text{Transfer Time (Hours)} = \frac{\text{Total Data Volume in Bits}}{\text{A
 
 ### Phase 3: Service Selection Matrix for Migration & Transfer
 
-| Source Technology | Target Destination | Migration Service | Migration Pattern | Operational Nuances |
+| Source Technology | Target Destination | Migration Service | Migration Pattern | Operational Nuances & Supported Scenarios |
 | :--- | :--- | :--- | :--- | :--- |
-| **Relational DB** (MySQL, Postgres, Oracle) | **Cloud SQL / AlloyDB** | **Database Migration Service (DMS)** | Serverless log-based CDC | Minimal downtime; continuous replication; initial data dump + CDC catch-up; private IP / reverse proxy. |
+| **Homogeneous MySQL** (On-prem, AWS RDS, GCE) | **Cloud SQL for MySQL** | **Database Migration Service (DMS)** | Serverless log-based CDC | Minimal downtime; initial data dump + binlog replication; supports public IP allowlisting, forward SSH tunnel, or private IP connectivity (VPC peering / PSC). |
+| **Homogeneous PostgreSQL** (On-prem, AWS RDS, GCE) | **Cloud SQL for PostgreSQL / AlloyDB for PostgreSQL** | **Database Migration Service (DMS)** | Serverless log-based CDC | Minimal downtime; logical replication (`pgoutput`); supports public IP allowlisting, forward SSH tunnel, or private IP. |
+| **Heterogeneous Oracle** (On-prem, AWS RDS, self-hosted) | **Cloud SQL for PostgreSQL / AlloyDB for PostgreSQL** | **Database Migration Service (DMS)** | Schema conversion + CDC | Minimal downtime; integrated Ora2Pg schema/code conversion + LogMiner CDC. *(Note: DMS does not support homogeneous Oracle-to-Oracle or Oracle-to-MySQL).* |
+| **Homogeneous SQL Server** (On-prem, AWS RDS, GCE) | **Cloud SQL for SQL Server** | **Database Migration Service (DMS)** | Backup/Restore + CDC | Minimal downtime; uses native transaction log backups for continuous synchronization. |
 | **Relational DB** (MySQL, Postgres, Oracle, SQL Server) | **BigQuery / Cloud Storage** | **Cloud Datastream** | Serverless log-based CDC | Sub-second replication into BigQuery staging tables using Storage Write API; appends transaction metadata. |
 | **POSIX Storage, NFS, AWS S3, Azure Blob** | **Cloud Storage (GCS)** | **Storage Transfer Service (STS)** | Scalable managed data transfer | Cloud-to-cloud requires zero agents; On-prem requires Docker agent pool; MD5/CRC32C incremental sync. |
 | **Exabyte-Scale On-Prem / Offline Data** | **Cloud Storage (GCS)** | **Transfer Appliance** | Ruggedized physical storage rack | Shipped to customer DC; AES-256 encrypted; shipped back to Google; ingested into target GCS bucket. |
@@ -367,11 +370,16 @@ $$\text{Transfer Time (Hours)} = \frac{\text{Total Data Volume in Bits}}{\text{A
 ---
 
 ### Phase 4: Connectivity, Security, and Encryption Design
-*   **Network Path**:
+Select the network path and connectivity method based on the specific migration scenario and security policy:
+*   **Network Transport**:
     *   **Dedicated Interconnect (10G/100G)**: Low latency, predictable SLA-backed enterprise bandwidth for petabyte migrations.
     *   **Partner Interconnect**: Supported when data center lacks direct colocation facilities.
     *   **Cloud VPN (HA-VPN)**: Encrypted IPsec tunnels over public internet; throughput limited to 3 Gbps per tunnel pair (can be scaled with multiple tunnels via ECMP).
-*   **Private Connectivity**: Database Migration Service and Datastream require private IP or reverse-proxy bastion configurations to access on-premises databases without exposing database ports to the public internet.
+*   **DMS & Datastream Connectivity Methods**:
+    *   **Static IP Allowlisting**: Easiest connectivity when the source database is publicly accessible and protected by SSL/TLS; customer allows Google Cloud's static outbound IP ranges on their source firewall.
+    *   **Forward-SSH Tunnel**: Used when the source database resides behind a corporate firewall without a dedicated VPN/Interconnect; connects via an intermediate customer-managed bastion host.
+    *   **Private Connectivity via VPC Peering or PSC**: Enterprise standard for databases that must not expose public IPs; connects the Google-managed tenant project directly into the customer VPC or through Private Service Connect.
+    *   **Reverse Proxy**: Deployed on Compute Engine when direct peering between tenant projects and source networks is restricted by non-transitive routing constraints.
 *   **In-Flight & At-Rest Encryption**: All Google Cloud transfer services enforce TLS in transit and write to CMEK-wrapped Cloud Storage buckets or BigQuery tables.
 
 ---
@@ -418,13 +426,14 @@ flowchart LR
 ```
 
 *   **Big Bang Cutover**: Application is taken offline; data is migrated; validation runs; traffic points to new system. High risk; only viable when data volume is small or extended downtime is acceptable.
-*   **Phased / Parallel CDC Cutover (The Enterprise Standard)**:
+*   **Phased / Parallel CDC Cutover (The Enterprise Standard for Minimal Downtime)**:
     1.  Perform initial baseline data load while production database remains live.
     2.  Start continuous CDC replication (DMS or Datastream) to capture all in-flight transactions.
-    3.  During scheduled maintenance window: Quiesce write traffic on legacy database.
+    3.  During scheduled cutover window: Quiesce write traffic on legacy database.
     4.  Allow CDC stream to drain until target replication lag reaches **zero**.
     5.  Run automated reconciliation scripts (row count + checksum verification).
     6.  Promote Google Cloud database to Primary and redirect application connection strings.
+    *   *Operational Reality*: **Actual cutover downtime is minimal rather than absolute zero**. Downtime duration depends directly on current CDC replication lag, the time needed to drain uncommitted transactions, execution of pre-cutover validation gates, and DNS / connection string propagation across client tiers.
 *   **Rollback Protocol**: If post-cutover validation fails or application errors spike beyond threshold:
     *   Maintain **reverse replication** from Google Cloud back to legacy source during initial hours, or retain legacy source intact so traffic can be instantly swung back without data loss.
 
@@ -465,7 +474,7 @@ flowchart LR
 
 ---
 
-### Scenario 2: Zero-Downtime Multi-Cloud Data Lake Migration
+### Scenario 2: Minimal-Egress Multi-Cloud In-Place Analytics & Migration
 **Context**: An enterprise retail corporation stores 850 TB of historical telemetry data in Amazon S3 (US-East-1) formatted as Apache Parquet. They want to execute real-time BigQuery analytics on this data immediately without paying millions of dollars in cross-cloud internet data egress costs or waiting weeks for full data transfer. Concurrently, data scientists in Google Cloud must run training queries combining this S3 data with existing BigQuery customer tables in `us-east4`.
 
 **Question**: What is the most cost-effective and immediate architectural pattern?
@@ -497,7 +506,7 @@ flowchart LR
 *   **D)** Use BigQuery Data Transfer Service to replicate PostgreSQL tables directly into BigQuery, then export BigQuery tables to Cloud SQL.
 
 **Detailed Answer Analysis**:
-*   **Correct Answer: A**. Database Migration Service (DMS) provides serverless, log-based CDC replication specifically engineered for minimal downtime migrations to Cloud SQL and AlloyDB. Continuous replication keeps the target fully updated with zero downtime. Dedicated Interconnect provides secure, private network transit. During the short cutover window, stopping traffic and draining the final CDC lag takes minutes, easily satisfying the 10-minute downtime constraint.
+*   **Correct Answer: A**. Database Migration Service (DMS) provides serverless, log-based CDC replication specifically engineered for minimal downtime migrations to Cloud SQL and AlloyDB. Continuous replication keeps the target continuously synchronized, reducing final application cutover to a minimal downtime window. Dedicated Interconnect provides secure, private network transit. During the short cutover window, stopping traffic and draining the final CDC lag takes minutes, easily satisfying the 10-minute downtime constraint.
 *   *Distractor Analysis*:
 *   **B** fails the 10-minute downtime requirement; dumping, uploading, and restoring 12 TB takes 20+ hours of full application downtime.
 *   **C** requires shipping logistics taking days or weeks, cannot capture in-flight CDC updates, and results in self-managed VMs rather than fully managed databases.

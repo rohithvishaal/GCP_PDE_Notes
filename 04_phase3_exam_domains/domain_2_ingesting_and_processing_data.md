@@ -87,7 +87,7 @@ Selecting the processing paradigm dictates cost, operational complexity, and lat
 ### 3. Ingestion Networking Fundamentals & Private Connectivity
 Data pipelines frequently traverse hybrid, multi-cloud, or multi-VPC networks. Security best practices mandate eliminating public IP addresses.
 
-*(For foundational network topology, Custom VPCs, and Shared VPC design, refer to [01_phase0_gcp_fundamentals/03_networking_vpc_firewalls_and_psc.md](file:///e:/gcp_pde_revamp/01_phase0_gcp_fundamentals/03_networking_vpc_firewalls_and_psc.md)).*
+*(For foundational network topology, Custom VPCs, and Shared VPC design, refer to [01_phase0_gcp_fundamentals/03_networking_vpc_firewalls_and_psc.md](../01_phase0_gcp_fundamentals/03_networking_vpc_firewalls_and_psc.md)).*
 
 ```mermaid
 flowchart LR
@@ -111,8 +111,10 @@ flowchart LR
 
 *   **Private Google Access (PGA)**: Mandatory for Dataflow workers (`--no-use-public-ips`) and Dataproc nodes provisioned without public IP addresses. PGA allows VMs with internal RFC 1918 IPs to reach Google APIs (`*.googleapis.com`) over Google's internal network fabric without traversing an external gateway.
 *   **Private Service Connect (PSC)**: Enables private, consumer-oriented IP endpoints inside your VPC to connect directly to managed services (Datastream, Cloud Data Fusion, Cloud SQL) or third-party partner services without VPC peering limits or route conflicts.
-*   **Datastream Private Connectivity**: Connects Datastream to on-premises or peered databases using PSC or a dedicated reverse-proxy VM, ensuring database credentials and replication streams never touch the public internet.
-*   **Cloud Data Fusion Private IP Instances**: Data Fusion control plane is provisioned in a Google-managed tenant VPC, communicating with customer VPCs via VPC Network Peering and Cloud SQL proxies.
+*   **Datastream Private Connectivity**: Connects Datastream to on-premises or peered databases using PSC, static IP allowlisting, or a dedicated reverse-proxy VM, ensuring database credentials and replication streams never touch the public internet.
+*   **Cloud Data Fusion Private IP Instances (PSC vs. Legacy Peering)**:
+    *   **Cloud Data Fusion 6.10+ (Recommended)**: Uses **Private Service Connect (PSC)** to connect the Google-managed tenant instance to customer VPC networks and data sources. PSC eliminates IP CIDR allocation conflicts, eliminates VPC peering quota limits, and simplifies cross-network reachability without requiring complex routing exchanges.
+    *   **Legacy Data Fusion (< 6.10)**: Relied on **VPC Network Peering** to the Google tenant project, requiring non-overlapping `/22` IP ranges and intermediate bastion/proxy VMs to route to on-premises networks due to non-transitive peering limitations.
 
 ---
 
@@ -120,7 +122,15 @@ flowchart LR
 *   **Transport Layer Security (TLS)**: All Google Cloud API endpoints and inter-service communications enforce TLS 1.3 encryption in transit by default.
 *   **Customer-Managed Encryption Keys (CMEK) Across the Pipeline**:
     *   *Pub/Sub Topic CMEK*: Encrypts incoming messages before writing to persistent buffer disks.
-    *   *Dataflow Pipeline CMEK*: Passed via pipeline option `--kmsKeyName=projects/.../cryptoKeys/...`. Encrypts worker persistent disks, shuffle buckets, and intermediate pipeline state.
+    *   *Dataflow Pipeline CMEK*: Encrypts worker persistent disks, Dataflow Shuffle persistent disks, and streaming/batch state.
+        *   **Pipeline SDK Options**:
+            *   **Python SDK**: `--kms_key=projects/PROJECT_ID/locations/LOCATION/keyRings/KEY_RING/cryptoKeys/KEY_NAME`
+            *   **Java SDK**: `--kmsKey=projects/PROJECT_ID/locations/LOCATION/keyRings/KEY_RING/cryptoKeys/KEY_NAME`
+        *   **CLI / Flex Template Run**: `--worker-kms-key-name=projects/...` (or `--dataflow-kms-key=projects/...`).
+        *   **Temporary Location & Encryption Scope Requirements**:
+            *   Dataflow requires a Cloud Storage temporary location (`--temp_location` / `--tempLocation`) in the same region.
+            *   The Cloud Storage temporary and staging buckets must also be protected with CMEK (either via default bucket CMEK or matching key).
+            *   **IAM Grants**: Grant `roles/cloudkms.cryptoKeyEncrypterDecrypter` on the key to both the Cloud Dataflow Service Agent (`service-<PROJECT_NUMBER>@dataflow-service-producer-prod.iam.gserviceaccount.com`) and the Compute Engine default or custom worker service account.
     *   *Storage / BigQuery CMEK*: Guarantees that final sinks are wrapped with the organization's Cloud KMS key.
 
 ---
@@ -142,21 +152,30 @@ flowchart LR
 *   **Ordering Keys**: When a publisher sets an `ordering_key` on a message, Pub/Sub delivers messages with the same key in the exact order received.
     *   *Exam Architectural Rule*: **Do not enable `--enable-message-ordering` on subscriptions consumed by Cloud Dataflow**. Dataflow pulls messages using multi-threaded streaming pull and distributes work across parallel bundles; downstream stages do not preserve Pub/Sub message ordering. If an ordering key stalls, worker starvation occurs. Stream ordering must be handled natively in Apache Beam using event-time timestamps, watermarks, and windowing.
 *   **Dead-Letter Topics (DLQ)**: Configures a `max_delivery_attempts` threshold (5–100). If a consumer fails to acknowledge a message after $N$ attempts, the message is automatically forwarded to a dead-letter topic on a best-effort basis for inspection.
-*   **Seek and Snapshot**: Allows you to rewind a subscription back in time (up to 31 days, matching the configured message retention duration) to replay unacknowledged or acknowledged messages after a downstream bug fix is deployed.
+*   **Message Retention vs. Snapshot Retention**:
+    *   **Message Retention**: Pub/Sub retains unacknowledged messages for a default of 7 days, configurable between **10 minutes and 31 days**. If `retain_acked_messages=true` is enabled on the subscription (or topic retention is configured), acknowledged messages are preserved in the message buffer up to the configured retention window (up to 31 days).
+    *   **Snapshot Retention**: A Pub/Sub snapshot captures the exact unacknowledged message state of a subscription at creation time. **Snapshot retention is strictly limited to a maximum of 7 days** (snapshots expire and are automatically deleted after 7 days; they cannot be extended).
+*   **Replaying Messages with Seek & Snapshots**:
+    *   *Timestamp Seek*: To replay acknowledged messages, `retain_acked_messages=true` must be configured (or topic retention enabled), and the seek timestamp must fall within the configured retention duration (up to 31 days).
+    *   *Snapshot Seek*: Seeking to a snapshot restores the subscription's unacknowledged state to the exact moment the snapshot was created, provided the snapshot is within its 7-day expiration window. Messages referenced by active snapshots are protected against message retention expiration.
 *   **BigQuery Direct Ingestion Subscriptions**: Streams data directly into BigQuery tables without launching a Cloud Dataflow worker cluster or Cloud Function, supporting JSON, Text, and Avro payloads.
 
 ---
 
-### 2. Cloud Pub/Sub Standard vs. Pub/Sub Lite
+### 2. Cloud Pub/Sub Standard vs. Pub/Sub Lite (Deprecated / Legacy)
 
-| Dimension | Cloud Pub/Sub Standard | Cloud Pub/Sub Lite |
+> [!WARNING]
+> **Pub/Sub Lite Deprecation Notice**: Google Cloud has officially deprecated Pub/Sub Lite. It is unavailable to new customers and is scheduled for full shutdown on **January 31, 2027**. **Do NOT recommend or select Pub/Sub Lite for new architectures**. Modern workloads requiring partition-based streaming should use Google Cloud Managed Service for Apache Kafka or Cloud Pub/Sub Standard. Pub/Sub Lite is documented here strictly to prepare for legacy exam maintenance scenarios.
+
+| Dimension | Cloud Pub/Sub Standard | Cloud Pub/Sub Lite (Legacy / Deprecated) |
 | :--- | :--- | :--- |
+| **Status** | Active, strategic primary messaging platform | **Deprecated** (Shutdown date: January 31, 2027; no new customers) |
 | **Architecture** | Global, serverless, automated horizontal scaling | Zonal or Regional, pre-provisioned partitions |
 | **Capacity Management** | Zero provisioning; scales from 0 to millions of msg/sec | Manual reservation of partition capacity ($X$ MiB/s write, $Y$ MiB/s read) |
 | **Availability / Durability** | Multi-zone regional/global durability | Zonal durability (replicated within one zone) or Regional |
 | **Ordering** | Supported via `ordering_key` across partitions | Guaranteed per individual partition |
 | **Pricing Model** | Pay per gigabyte processed ($40/TB) | Pay for provisioned partition bandwidth and storage capacity ($10/TB) |
-| **Exam Selection Heuristic** | Mission-critical, zero ops, dynamic bursty workloads, multi-region | Predictable continuous workloads, high-volume log aggregation, budget-constrained |
+| **Exam Selection Heuristic** | Primary choice: mission-critical, zero ops, dynamic bursty workloads, multi-region | Legacy maintenance only; never select for greenfield architectures |
 
 ---
 
@@ -273,6 +292,9 @@ Instead of invoking external REST endpoints inside a `DoFn` (which creates laten
 *   **What It Is**: Fully managed visual ETL/ELT service built on open-source CDAP (Cask Data Application Platform).
 *   **Wrangler**: Interactive graphical interface for data cleansing, schema transformation, and filtering with 150+ pre-built source and sink plugins.
 *   **Execution**: When executed, Data Fusion compiles the visual pipeline into an optimized Apache Spark program and runs it on a transient, ephemeral Cloud Dataproc cluster.
+*   **Private Instance Networking Architecture**:
+    *   **Cloud Data Fusion 6.10+ (Current Standard)**: Employs **Private Service Connect (PSC)** to connect the Google-managed tenant project instance with customer VPC networks. PSC eliminates CIDR allocation conflicts, avoids VPC peering limits, and provides secure private endpoints without requiring proxy bastions to reach on-premises networks.
+    *   **Legacy Data Fusion (< 6.10)**: Relied on **VPC Network Peering**, which required reserving a `/22` IP allocation and deploying custom reverse-proxy VMs to traverse non-transitive peering boundaries to on-premises databases.
 *   **Selection Heuristic**: Choose Cloud Data Fusion when the organization mandates a code-free graphical interface for ETL developers and business analysts; choose Dataflow when custom Apache Beam code, extreme throughput, sub-second latency, or custom stateful logic is required.
 
 ---

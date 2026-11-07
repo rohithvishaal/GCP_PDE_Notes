@@ -261,22 +261,28 @@ flowchart TD
     Client_App["Client Application"] -->|Persistent Internal IP| Primary_SQL
     Client_App -->|Persistent Internal IP| Primary_Redis
 
-    note["Zone A Outage triggers automatic failover in < 60s (Cloud SQL) or < 30s (Memorystore).<br/>Client reconnects to the SAME internal IP with zero DNS changes."]
+    note["Zone A Outage triggers automatic failover in approximately 60s (Cloud SQL, environment-dependent)<br/>or typically < 30s (Memorystore Standard). Client reconnects to the SAME internal IP."]
 ```
 
 #### Cloud SQL HA vs. Cross-Region Read Replicas
-*   **Regional High Availability**: Synchronous persistent disk replication between Zone A (Primary) and Zone B (Standby). If Zone A experiences hardware failure, Cloud SQL executes automated failover in $<60$ seconds. Zero data loss ($\text{RPO} = 0$).
+*   **Regional High Availability**: Synchronous persistent disk replication between Zone A (Primary) and Zone B (Standby). If Zone A experiences hardware failure, Cloud SQL executes automated failover in approximately 60 seconds (duration may vary based on active uncommitted transaction rollback and recovery workload). Under synchronous disk replication, zero data loss is maintained ($\text{RPO} = 0$).
 *   **Cross-Region Read Replicas**: Asynchronous replication across regions. If the primary region experiences catastrophic failure, cross-region replicas must be **manually promoted** to primary. Because replication is asynchronous, failover carries potential data loss ($\text{RPO} > 0$).
 
-#### Memorystore for Redis Replication and Failover
-*   **Basic Tier**: Single zone, no replica. If the underlying host fails, cache data is permanently lost.
-*   **Standard Tier**: Cross-zone replication (Zone A to Zone B). Automatic failover completes in under 30 seconds with persistent IP address preservation.
-*   **Persistence Options**: Supports RDB (periodic snapshot dumps to Cloud Storage) and AOF (Append-Only File for minimal RPO recovery).
+#### Memorystore for Redis vs. Redis Cluster Architecture & Failover
+*   **Memorystore for Redis (Standalone Instance)**:
+    *   *Basic Tier*: Single zone, no replica. If the underlying host fails or during maintenance, all cached data is permanently lost. No automated failover or persistence.
+    *   *Standard Tier (High Availability)*: Cross-zone replication (Zone A Primary to Zone B Standby). Automated failover typically completes in under 30 seconds with persistent internal IP address preservation. Supports persistence via RDB periodic snapshots (to Cloud Storage) and AOF (Append-Only File logging). Supports up to 5 read replicas to scale read operations. Maximum single-instance capacity is 300 GB (no keyspace sharding).
+*   **Memorystore for Redis Cluster (Horizontally Scalable)**:
+    *   *Architecture*: Horizontally partitioned key-value cache across 16,384 hash slots. Maximum capacity scales across up to 250 total nodes (e.g., up to 125 shards with 1 replica per shard, or up to 250 shards with 0 replicas).
+    *   *Failover & Persistence*: Automated failover operates independently per shard. Supports automated daily RDB backups to Cloud Storage and AOF persistence. Requires cluster-aware Redis clients.
 
 ---
 
 ### 2. Stream & Pipeline Recovery Strategies
-*   **Pub/Sub Seek & Replay**: When downstream code defects cause incorrect processing, deploy the bug fix, create a Pub/Sub Snapshot, and issue a `seek` API call to rewind the subscription to a timestamp before the bug occurred (up to 31 days).
+*   **Pub/Sub Seek & Snapshot Replay**:
+    *   *Message Retention vs. Snapshot Lifetime*: Pub/Sub message retention on topics and subscriptions can be configured between **10 minutes and 31 days** (default 7 days). In contrast, **Pub/Sub snapshots have a strict maximum retention limit of 7 days** from creation (snapshots automatically expire and cannot be extended).
+    *   *Replay via Timestamp Seek*: When downstream processing bugs are deployed, fix the code and issue a `seek` command to an earlier timestamp. To replay acknowledged messages, the subscription must have `retain_acked_messages=true` configured (or the topic must have retained the messages), and the seek timestamp must be within the configured message retention window (up to 31 days).
+    *   *Replay via Snapshot Seek*: Seeking to a pre-created snapshot immediately resets the subscription's unacknowledged state to the exact moment the snapshot was taken, provided the snapshot is within its 7-day expiration window. Active snapshots protect referenced unacknowledged messages from expiration.
 *   **Dataflow Streaming Job Restarts**:
     *   *Drain*: Stops reading new input messages, finishes in-flight window processing, and terminates cleanly.
     *   *Cancel*: Immediately kills workers; in-flight non-checkpointed data is abandoned.
@@ -293,7 +299,10 @@ flowchart TD
     FOR SYSTEM_TIME AS OF TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 1 HOUR);
     ```
 *   **Table Clones**: Instant, zero-copy writable clones of production tables at a specific historical timestamp.
-*   **BigQuery Cross-Region Dataset Replication (Enterprise Plus Exclusive)**: Synchronizes datasets across primary and secondary regions, enabling planned or disaster failover.
+*   **BigQuery Cross-Region Dataset Replication (Enterprise Plus Exclusive)**:
+    *   *Soft Failover (Planned)*: Performed when both regions are healthy and reachable. BigQuery verifies that all replication streams from the primary region have completed and caught up before promoting the secondary region to primary. Guarantees zero data loss ($\text{RPO} = 0$).
+    *   *Hard Failover (Unplanned / Disaster)*: Performed during an active regional catastrophe when the primary region is unreachable. The administrator forces replica promotion without waiting for pending replication streams to catch up. Any writes committed in the primary region that were not yet replicated across regions before the outage are permanently lost ($\text{RPO} > 0$).
+    *   *Access Control Replication Limitations*: Dataset and table IAM policies, row-level security (RLS), column-level security (CLS) policy tags, and Authorized Views/Datasets configured on the primary dataset are **not automatically synchronized** to the secondary replica dataset across regions. Administrators must independently replicate and maintain IAM and access control configurations across both regions.
 
 ---
 
@@ -301,11 +310,11 @@ flowchart TD
 
 | Failure Domain | Primary Failure Mode | Detection Signal | Correct Remediation Mechanism | Target Operational Outcome |
 | :--- | :--- | :--- | :--- | :--- |
-| **Operational DB** | Primary VM hardware crash | Cloud Monitoring heartbeat loss | Automatic Cloud SQL HA failover to standby disk in Zone B | Failover completes in $<60$s; zero data loss |
-| **Streaming Buffer** | Pipeline processing bug | Downstream bad data alerted | Deploy fixed Beam code; execute Pub/Sub `seek` to rewind subscription | Replays uncorrupted messages from buffer |
+| **Operational DB** | Primary VM hardware crash | Cloud Monitoring heartbeat loss | Automatic Cloud SQL HA failover to standby disk in Zone B | Failover completes in ~60s (environment-dependent); zero data loss |
+| **Streaming Buffer** | Pipeline processing bug | Downstream bad data alerted | Deploy fixed Beam code; execute Pub/Sub `seek` to rewind subscription | Replays uncorrupted messages from buffer (requires `retain_acked_messages` or 7d snapshot) |
 | **Processing Engine** | Worker memory leak / crash | Dataflow worker unhealthy restarts | Restart with Streaming Engine and right-sized memory | Resumes processing from MillWheel checkpoint |
 | **Analytical DW** | Accidental table `DROP` or `TRUNCATE` | Data team alert | Restore table snapshot via `FOR SYSTEM_TIME AS OF` query | Table restored in minutes without backup restores |
-| **Regional Storage** | Entire datacenter region destroyed | Regional SLA outage declaration | Failover to dual-region GCS bucket with Turbo Replication | $\le 15$-minute RPO backed by financial SLA |
+| **Regional Storage** | Entire datacenter region destroyed | Regional SLA outage declaration | Failover to dual-region GCS bucket with Turbo Replication | $\le 15$-minute RPO backed by monthly SLA (99.9% bytes replicated in 15m) |
 
 ---
 
