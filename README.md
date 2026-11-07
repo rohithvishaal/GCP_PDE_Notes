@@ -48,15 +48,15 @@ Authored from first principles for data engineers and architects transitioning f
 - [06. Disaster Recovery, Resilience & Cost Defense](./03_phase2_lifecycle_architecture/06_dr_resilience_and_cost_defense.md): Dual-Region Turbo Replication (<15 min SLA), BigQuery cross-region dataset replication, Time Travel, and FinOps slot allocation.
 
 ### [Phase 3: Official Exam Domains Deep Dive](./04_phase3_exam_domains/)
-- [Domain 1: Designing Data Processing Systems](./04_phase3_exam_domains/domain_1_designing_data_processing_systems.md): Security, Org policies, CMEK, DLP tokenization, RPO/RTO calculations, and BigQuery Omni multi-cloud.
-- [Domain 2: Ingesting and Processing Data](./04_phase3_exam_domains/domain_2_ingesting_and_processing_data.md): Batch/streaming pipelines, Beam stateful DoFns, triggers, Dataproc Spot VMs with graceful decommissioning, and Dataform.
-- [Domain 3: Storing Data](./04_phase3_exam_domains/domain_3_storing_data.md): Storage classes, BigQuery logical vs. physical billing, Bigtable row key salting, Spanner TrueTime commit waits, and AlloyDB HTAP.
-- [Domain 4: Preparing and Using Data for Analysis](./04_phase3_exam_domains/domain_4_preparing_and_using_data_for_analysis.md): BI Engine, Materialized Views, Dynamic Data Masking, BigQuery ML, Vertex AI Feature Store, and Vector Search RAG pipelines.
-- [Domain 5: Maintaining and Automating Data Workloads](./04_phase3_exam_domains/domain_5_maintaining_and_automating_data_workloads.md): BigQuery Editions/Reservations, Dataproc cluster tuning, Dataflow system lag & backpressure diagnostics, and `INFORMATION_SCHEMA` queries.
+- [Domain 1: Designing Data Processing Systems (22%)](./04_phase3_exam_domains/domain_1_designing_data_processing_systems.md): Security and compliance, Assured Workloads, Cloud EKM/KAJ, CMEK, DLP tokenization, RPO/RTO calculations, BigQuery Omni multi-cloud, and the complete 6-stage enterprise data migration lifecycle.
+- [Domain 2: Ingesting and Processing the Data (25%)](./04_phase3_exam_domains/domain_2_ingesting_and_processing_data.md): Pipeline planning, VPC/PGA/PSC private networking, batch/streaming pipelines, Beam stateful DoFns, triggers, Dataproc Spot VMs with graceful decommissioning, Dataform, and CI/CD deployment with Cloud Build.
+- [Domain 3: Storing the Data (20%)](./04_phase3_exam_domains/domain_3_storing_data.md): 9-service storage selection framework (including Firestore & Memorystore), DW schema modeling, GCS storage classes & early deletion penalties, BigLake, and Dataplex / Knowledge Catalog mesh governance.
+- [Domain 4: Preparing and Using Data for Analysis (15%)](./04_phase3_exam_domains/domain_4_preparing_and_using_data_for_analysis.md): BI Engine, Materialized Views, Dynamic Data Masking, BigQuery ML with `TRANSFORM` syntax, Vertex AI Feature Store, Vector Search RAG pipelines, Analytics Hub, and Data Clean Rooms.
+- [Domain 5: Maintaining and Automating Data Workloads (18%)](./04_phase3_exam_domains/domain_5_maintaining_and_automating_data_workloads.md): BigQuery Editions/Reservations, Dataproc Persistent vs Ephemeral vs Serverless, Composer DAG scheduling & sensors, `INFORMATION_SCHEMA` diagnostics, and high availability & disaster recovery failover.
 
 ### [Phase 4: Product Comparisons & Architectural Decision Trees](./05_phase4_comparisons_and_decision_trees/)
 - [01. Distributed Compute: Dataflow vs. Dataproc vs. Cloud Data Fusion vs. Dataform](./05_phase4_comparisons_and_decision_trees/01_compute_comparisons.md)
-- [02. Storage & Databases: BigQuery vs. Bigtable vs. Spanner vs. Cloud SQL vs. AlloyDB vs. Firestore](./05_phase4_comparisons_and_decision_trees/02_storage_database_comparisons.md)
+- [02. Storage & Databases: BigQuery vs. Bigtable vs. Spanner vs. Cloud SQL vs. AlloyDB vs. Firestore vs. Memorystore](./05_phase4_comparisons_and_decision_trees/02_storage_database_comparisons.md)
 - [03. Ingestion & Orchestration: Pub/Sub vs. Datastream vs. STS; Composer vs. Workflows vs. Scheduler](./05_phase4_comparisons_and_decision_trees/03_ingestion_orchestration_comparisons.md)
 
 ### [Phase 5: Production Architecture Case Studies](./06_phase5_case_studies/)
