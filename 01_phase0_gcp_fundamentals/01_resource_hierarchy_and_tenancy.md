@@ -49,7 +49,12 @@ graph TD
 - **Logical Grouping**: Organizes projects by line of business (LOB), environment (`prod`, `staging`, `dev`), or compliance boundary (`pci-dss`, `hipaa`).
 - **Nesting**: Can be nested up to **10 levels deep**.
 - **Policy Aggregation**: Applying an IAM role or Org Policy at the folder level automatically propagates downward to all child folders and projects through policy inheritance.
+``` shell
+gcloud resource-manager folders create \
+    --display-name="DISPLAY_NAME" \
+    --organization=ORGANIZATION_ID
 
+```
 ### 2.3 The Project: The Sovereign Boundary
 In Google Cloud, the **Project** is the foundational atom of tenancy. It is not merely a tag or a namespace; it establishes the explicit boundary for:
 1. **IAM Boundary**: IAM bindings assigned to users, groups, or Service Accounts apply across all resources within the project unless constrained at lower resource levels.

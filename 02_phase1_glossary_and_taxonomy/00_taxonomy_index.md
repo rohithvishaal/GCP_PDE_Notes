@@ -109,9 +109,9 @@ graph TD
 ## 4. Phase 1 Document Guide
 
 To examine deep technical specifications, architectural designs, trade-offs, and exam notes, proceed to the domain deep-dive chapters:
-- [01. Cloud & Infrastructure Architecture](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/01_cloud_and_infrastructure.md): Borg, Colossus, Jupiter, Andromeda, Ephemeral Compute.
-- [02. Storage & Operational Databases](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/02_storage_and_databases.md): Complete specifications for GCS, BigQuery, BigLake, Bigtable, Spanner, Cloud SQL, AlloyDB, Firestore, Memorystore.
-- [03. Ingestion, Messaging & Streaming](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/03_ingestion_and_streaming.md): Pub/Sub, Pub/Sub Lite, Datastream, BigQuery DTS, Storage Transfer Service.
-- [04. Processing, Compute & Transformation](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/04_processing_and_compute.md): Cloud Dataflow (Beam), Cloud Dataproc (Spark), Cloud Data Fusion, Dataform.
-- [05. Governance, Cataloging & Data Sharing](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/05_governance_and_metadata.md): Dataplex, Dataplex Catalog, Analytics Hub, Lineage, Quality.
-- [06. Security, Encryption & Compliance](file:///e:/gcp_pde_revamp/02_phase1_glossary_and_taxonomy/06_security_and_compliance.md): Cloud KMS (CMEK/CSEK), Sensitive Data Protection (DLP), VPC Service Controls, Zero Trust.
+- [01. Cloud & Infrastructure Architecture](./01_cloud_and_infrastructure.md): Borg, Colossus, Jupiter, Andromeda, Ephemeral Compute.
+- [02. Storage & Operational Databases](./02_storage_and_databases.md): Complete specifications for GCS, BigQuery, BigLake, Bigtable, Spanner, Cloud SQL, AlloyDB, Firestore, Memorystore.
+- [03. Ingestion, Messaging & Streaming](./03_ingestion_and_streaming.md): Pub/Sub, Pub/Sub Lite, Datastream, BigQuery DTS, Storage Transfer Service.
+- [04. Processing, Compute & Transformation](./04_processing_and_compute.md): Cloud Dataflow (Beam), Cloud Dataproc (Spark), Cloud Data Fusion, Dataform.
+- [05. Governance, Cataloging & Data Sharing](./05_governance_and_metadata.md): Dataplex, Dataplex Catalog, Analytics Hub, Lineage, Quality.
+- [06. Security, Encryption & Compliance](./06_security_and_compliance.md): Cloud KMS (CMEK/CSEK), Sensitive Data Protection (DLP), VPC Service Controls, Zero Trust.
