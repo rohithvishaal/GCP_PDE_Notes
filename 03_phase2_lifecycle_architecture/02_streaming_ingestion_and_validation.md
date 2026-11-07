@@ -349,7 +349,8 @@ from apache_beam.transforms.trigger import (
     AfterCount,
     AfterProcessingTime,
     AfterWatermark,
-    AccumulationMode
+    AccumulationMode,
+    Repeatedly
 )
 from apache_beam.transforms.window import SessionWindows, TimestampedValue
 
@@ -473,9 +474,7 @@ def run_pipeline():
             | "SessionWindowing" >> beam.WindowInto(
                 SessionWindows(gap_size=600), # 10-minute inactivity gap
                 trigger=AfterWatermark(
-                    early=AfterProcessingTime.pastFirstElementInPane().plusDelayOf(
-                        beam.transforms.window.Duration(seconds=30)
-                    ),
+                    early=Repeatedly(AfterProcessingTime(30)),
                     late=AfterCount(1)
                 ),
                 allowed_lateness=beam.transforms.window.Duration(seconds=900), # 15 minutes
@@ -664,7 +663,7 @@ Your engineering team needs to ingest real-time checkout transactions from your 
 You are deploying a streaming Apache Beam pipeline on Dataflow that aggregates financial metrics across 1-hour tumbling windows. Executive dashboards require speculative updates every 60 seconds, but financial controllers require the final, absolute sum after all delayed events are accounted for. How should you construct your trigger and accumulation strategy?
 
 - A. Use `AfterWatermark.pastEndOfWindow()` with `AccumulationMode.DISCARDING`.
-- B. Use `AfterWatermark(early=AfterProcessingTime.pastFirstElementInPane().plusDelayOf(Duration(seconds=60)), late=AfterCount(1))` with `AccumulationMode.ACCUMULATING`.
+- B. Use `AfterWatermark(early=Repeatedly(AfterProcessingTime(60)), late=AfterCount(1))` with `AccumulationMode.ACCUMULATING`.
 - C. Use a Global Window with a count trigger firing every 100 elements.
 - D. Use a sliding window with duration 60 seconds and slide 60 seconds.
 

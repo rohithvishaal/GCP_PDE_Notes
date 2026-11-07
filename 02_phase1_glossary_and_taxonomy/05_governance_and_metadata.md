@@ -118,11 +118,9 @@ rules:
 
 Run via CLI:
 ```bash
-gcloud dataproc-gdc dq-jobs create ... # Or Dataplex native CLI
 gcloud dataplex datascans create data-quality sales-dq-scan \
     --location=us-central1 \
-    --data-source-dataset=projects/prj-data-prod/datasets/sales_marts \
-    --data-source-table=transactions \
+    --data-source-resource=//bigquery.googleapis.com/projects/prj-data-prod/datasets/sales_marts/tables/transactions \
     --data-quality-spec-file=dataplex-dq-rule.yaml
 ```
 

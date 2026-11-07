@@ -73,17 +73,18 @@ gcloud compute instances list \
 ### 2.1 Create Dual-Region Bucket with Turbo Replication
 ```bash
 gcloud storage buckets create gs://corp-lake-landing-us \
-    --location=us-central1,us-east4 \
+    --location=US \
+    --placement=us-central1,us-east4 \
     --default-storage-class=STANDARD \
     --uniform-bucket-level-access \
-    --enable-turbo-replication
+    --recovery-point-objective=ASYNC_TURBO
 ```
-- **Explanation**: Provisions an active-active dual-region landing bucket with a guaranteed 15-minute cross-region RPO.
+- **Explanation**: Provisions an active-active dual-region landing bucket backed by a contractual 15-minute cross-region RPO SLA.
 - **Flags**:
-  - `--location`: Pair of regions forming the dual-region boundary.
+  - `--location=US --placement=us-central1,us-east4`: Predefined or custom dual-region pair forming the dual-region boundary.
   - `--default-storage-class`: Default class for new objects (`STANDARD`, `NEARLINE`, `COLDLINE`, `ARCHIVE`).
   - `--uniform-bucket-level-access`: Disables legacy object-level ACLs; enforces centralized Cloud IAM only (PDE requirement).
-  - `--enable-turbo-replication`: Guarantees 100% of objects replicate to the paired region within 15 minutes.
+  - `--recovery-point-objective=ASYNC_TURBO`: Enables Turbo Replication, contractually guaranteeing $\ge 99.9\%$ monthly replication volume conformance and $\ge 99.0\%$ time conformance within 15 minutes.
 
 ### 2.2 Configure Object Lifecycle Management
 ```bash
@@ -178,15 +179,16 @@ bq cp \
 
 ### 3.5 Create BI Engine In-Memory Reservation
 ```bash
-bq mk \
-    --connection_type=BI_ENGINE \
+bq update \
+    --project_id=my-pde-analytics-prod \
     --location=us-central1 \
-    --bi_reservation_size=10737418240 \
-    --project_id=my-pde-analytics-prod
+    --bi_reservation_size=10 \
+    --reservation
 ```
-- **Explanation**: Allocates 10 GB of sub-millisecond memory cache in `us-central1` for dashboard queries.
+- **Explanation**: Allocates 10 GiB of sub-millisecond memory cache in `us-central1` for dashboard queries.
 - **Flags**:
-  - `--bi_reservation_size`: RAM allocation in bytes (10 GB).
+  - `--bi_reservation_size`: RAM allocation in GiB (`10` allocates a 10 GiB in-memory cache).
+  - `--reservation`: Targets BI Engine reservation management for the project and location.
 
 ---
 
@@ -253,7 +255,7 @@ gcloud pubsub subscriptions create sub-orders-direct-bq \
 ### 5.1 Run Production Flex Template with Streaming Engine
 ```bash
 gcloud dataflow flex-template run realtime-ecom-pipeline-prod \
-    --template-file-gcs-path=gs://corp-dataflow-templates/templates/retail_stream.json \
+    --template-file-gcs-location=gs://corp-dataflow-templates/templates/retail_stream.json \
     --region=us-central1 \
     --service-account-email=sa-dataflow-pipeline@my-pde-analytics-prod.iam.gserviceaccount.com \
     --network=analytics-vpc \
@@ -270,7 +272,7 @@ deadLetterBucket=gs://corp-lake-landing-us/dlq/
 ```
 - **Explanation**: Deploys a containerized Apache Beam streaming pipeline with private networking, autoscaling, and off-VM state management.
 - **Flags**:
-  - `--template-file-gcs-path`: GCS pointer to container specification file.
+  - `--template-file-gcs-location`: GCS pointer to container specification file.
   - `--region`: Regional control plane executing the pipeline.
   - `--service-account-email`: Worker VM execution identity.
   - `--disable-public-ips`: Prevents worker VMs from having public Internet IPs (requires Private Google Access).
@@ -298,7 +300,6 @@ gcloud dataflow jobs drain 2026-11-07_01_00_00-1234567890 \
 gcloud dataproc clusters create ephemeral-spark-cluster \
     --region=us-central1 \
     --zone=us-central1-a \
-    --single-node=false \
     --master-machine-type=n2-standard-4 \
     --master-boot-disk-size=100GB \
     --num-workers=2 \
@@ -329,7 +330,7 @@ gcloud dataproc batches submit pyspark gs://corp-spark-jobs/scripts/aggregate_sa
     --region=us-central1 \
     --service-account=sa-dataproc@my-pde-analytics-prod.iam.gserviceaccount.com \
     --subnet=data-private-subnet \
-    --deps-pkg=gs://corp-spark-jobs/dependencies/helpers.zip \
+    --py-files=gs://corp-spark-jobs/dependencies/helpers.zip \
     --jars=gs://spark-lib/bigquery/spark-3.5-bigquery-0.36.0.jar \
     --version=2.2 \
     -- --input_date=2026-11-07
@@ -337,7 +338,7 @@ gcloud dataproc batches submit pyspark gs://corp-spark-jobs/scripts/aggregate_sa
 - **Explanation**: Executes a distributed PySpark script entirely serverless. Google provisions, scales, and deletes Spark resources automatically.
 - **Flags**:
   - `batches submit pyspark`: Targets the Dataproc Serverless engine.
-  - `--deps-pkg`: Custom zipped Python packages distributed to executor runtimes.
+  - `--py-files`: Custom zipped Python packages or modules distributed to executor runtimes.
   - `--jars`: Java dependencies (e.g., BigQuery connector) placed on driver and executor classpaths.
   - `--`: Separator passing remaining arguments directly to the Python script's `argparse`.
 
@@ -349,8 +350,8 @@ gcloud dataproc batches submit pyspark gs://corp-spark-jobs/scripts/aggregate_sa
 ```bash
 gcloud bigtable instances create retail-profile-store \
     --display-name="Realtime Retail Customer Store" \
-    --cluster-config=id=retail-cluster-c1,zone=us-central1-b,nodes=3,autoscaling-min=3,autoscaling-max=20,autoscaling-cpu-target=65 \
-    --cluster-config=id=retail-cluster-c2,zone=us-central1-c,nodes=3,autoscaling-min=3,autoscaling-max=20,autoscaling-cpu-target=65
+    --cluster-config=id=retail-cluster-c1,zone=us-central1-b,nodes=3,autoscaling-min-nodes=3,autoscaling-max-nodes=20,autoscaling-cpu-target=65 \
+    --cluster-config=id=retail-cluster-c2,zone=us-central1-c,nodes=3,autoscaling-min-nodes=3,autoscaling-max-nodes=20,autoscaling-cpu-target=65
 ```
 - **Explanation**: Provisions an active-active, multi-zone Bigtable instance with automated CPU-based node autoscaling (targets sub-10ms latency for warm SSD clusters under 65% CPU load; note that Bigtable SLAs guarantee availability, not a specific latency number).
 - **Flags**:
@@ -456,23 +457,26 @@ gcloud datastream connection-profiles create cp-postgres-orders \
     --postgresql-port=5432 \
     --postgresql-username=datastream_cdc \
     --postgresql-password="CDCSecretPassword" \
-    --postgresql-database=production_db
+    --postgresql-database=production_db \
+    --private-connection=projects/my-pde-analytics-prod/locations/us-central1/privateConnections/pde-datastream-vpc-peering
 ```
-- **Explanation**: Configures connectivity and credentials for Datastream to tail WAL logs from the source database.
+- **Explanation**: Configures connectivity and credentials for Datastream to tail WAL logs from the source database across private VPC peering.
+- **Flags**:
+  - `--private-connection`: Specifies the Datastream private connectivity configuration resource URI for RFC 1918 private IP peering.
 
 ### 10.2 Create Real-Time CDC Replication Stream to BigQuery
 ```bash
 gcloud datastream streams create stream-orders-to-bigquery \
     --location=us-central1 \
-    --source=cp-postgres-orders \
-    --destination=cp-bigquery-lake \
-    --postgresql-source-config=replication_slot=datastream_slot,publication=datastream_pub \
-    --bigquery-destination-config=data_freshness=0s
+    --source=projects/my-pde-analytics-prod/locations/us-central1/connectionProfiles/cp-postgres-orders \
+    --destination=projects/my-pde-analytics-prod/locations/us-central1/connectionProfiles/cp-bigquery-lake \
+    --postgresql-source-config=pg_source_config.json \
+    --bigquery-destination-config=bq_dest_config.json
 ```
 - **Explanation**: Establishes continuous, zero-ETL replication from PostgreSQL tables directly into BigQuery.
 - **Flags**:
-  - `--postgresql-source-config`: Points to the source database's logical replication slot and publication.
-  - `--bigquery-destination-config=data_freshness=0s`: Streams updates directly to BigQuery storage without batch-staging delays.
+  - `--postgresql-source-config`: Path to JSON file specifying source logical replication slot and publication (e.g., `{"replicationSlot": "datastream_slot", "publication": "datastream_pub"}`).
+  - `--bigquery-destination-config`: Path to JSON file configuring destination dataset and freshness (e.g., `{"dataFreshness": "0s"}`).
 
 ---
 
@@ -559,21 +563,25 @@ gcloud kms keys create lake-encryption-key \
 gcloud kms keys add-iam-policy-binding lake-encryption-key \
     --location=us-central1 \
     --keyring=data-ring \
-    --member="serviceAccount:bq-my-pde-analytics-prod@bigquery-encryption.iam.gserviceaccount.com" \
+    --member="serviceAccount:bq-${PROJECT_NUMBER}@bigquery-encryption.iam.gserviceaccount.com" \
     --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
 ```
 - **Explanation**: Allows the BigQuery managed service agent to encrypt and decrypt storage using your CMEK key.
+- **Note**: The BigQuery encryption service account format strictly requires the numeric project number (e.g., `bq-123456789012@bigquery-encryption.iam.gserviceaccount.com`), not the alphanumeric project ID.
 
 ### 13.3 Inspect Cloud Storage for PII Using Sensitive Data Protection (DLP)
 ```bash
-gcloud dlp jobs create \
-    --inspect-job \
+gcloud dlp job-triggers create \
+    --trigger-id=inspect-landing-pii \
+    --display-name="Inspect Lake Landing PII" \
     --storage-bucket=corp-lake-landing-us \
     --info-types=EMAIL_ADDRESS,US_SOCIAL_SECURITY_NUMBER,CREDIT_CARD_NUMBER \
     --min-likelihood=LIKELY
 ```
-- **Explanation**: Runs an asynchronous scan across Cloud Storage objects to identify sensitive PII.
+- **Explanation**: Creates an inspection job trigger in Cloud DLP (Sensitive Data Protection) to scan Cloud Storage objects and detect sensitive PII.
 - **Flags**:
+  - `--trigger-id`: Unique identifier for the inspection trigger.
+  - `--storage-bucket`: Cloud Storage bucket scanned for sensitive data.
   - `--info-types`: Predefined detectors to match in file payloads.
   - `--min-likelihood`: Match confidence threshold (`VERY_UNLIKELY`, `UNLIKELY`, `POSSIBLE`, `LIKELY`, `VERY_LIKELY`).
 
@@ -585,11 +593,11 @@ gcloud dlp jobs create \
 ```bash
 gcloud compute networks subnets update data-private-subnet \
     --region=us-central1 \
-    --enable-private-google-access
+    --enable-private-ip-google-access
 ```
 - **Explanation**: Allows VMs, Dataproc nodes, and Dataflow workers without external IP addresses to access Google APIs (BigQuery, GCS, Pub/Sub) via internal routing.
 - **Flags**:
-  - `--enable-private-google-access`: Routes internal VM traffic targeting default Google API domains (`*.googleapis.com`) to Google's internal networkVIPs (`199.36.153.8/30`).
+  - `--enable-private-ip-google-access`: Enables internal VM traffic without public IPs to reach Google APIs (`*.googleapis.com`) via Google's internal gateway. To steer or restrict traffic, private VIPs `private.googleapis.com` (`199.36.153.8/30`) or `restricted.googleapis.com` (`199.36.153.4/30` for VPC Service Controls) can be configured via internal DNS.
 
 ### 14.2 Create Firewall Rule for Internal Pipeline Communication
 ```bash

@@ -98,6 +98,27 @@ PARTITION BY DATE(window_start)
 CLUSTER BY device_type;"
 ```
 
+### 2.5 Create Dedicated Dataflow Worker Service Account & IAM Roles
+Modern Google Cloud projects do not grant permissions to default service accounts. Create a dedicated least-privilege worker service account and assign the necessary IAM roles:
+
+```bash
+export WORKER_SA="sa-dataflow-worker@${PROJECT_ID}.iam.gserviceaccount.com"
+
+gcloud iam service-accounts create sa-dataflow-worker \
+    --display-name="Dataflow Worker Service Account"
+
+for role in \
+    roles/dataflow.worker \
+    roles/pubsub.subscriber \
+    roles/bigquery.dataEditor \
+    roles/bigquery.jobUser \
+    roles/storage.objectAdmin; do
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+        --member="serviceAccount:${WORKER_SA}" \
+        --role="${role}"
+done
+```
+
 ---
 
 ## 3. Pipeline Implementation Code
@@ -137,7 +158,6 @@ import apache_beam as beam
 from apache_beam import pvalue
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions, SetupOptions, GoogleCloudOptions
 from apache_beam.transforms.window import FixedWindows, AfterWatermark, AfterProcessingTime, AccumulationMode
-from apache_beam.transforms.trigger import Repeatedly
 
 # Define Dead Letter Queue tag
 TAG_DLQ = 'dead_letter_records'
@@ -261,13 +281,11 @@ def run():
             valid_stream
             | 'ApplyEventWindows' >> beam.WindowInto(
                 FixedWindows(60),  # 60-second fixed window
-                trigger=Repeatedly(
-                    AfterWatermark(
-                        early=AfterProcessingTime(10), # Speculative early results every 10s
-                        late=AfterProcessingTime(30)   # Late data re-firings
-                    )
+                trigger=AfterWatermark(
+                    early=AfterProcessingTime(10),  # Speculative early results every 10s
+                    late=AfterProcessingTime(30)    # Late data re-firings
                 ),
-                allowed_lateness=120, # 2 minutes allowed lateness
+                allowed_lateness=120,  # 2 minutes allowed lateness
                 accumulation_mode=AccumulationMode.ACCUMULATING
             )
             | 'KeyByDeviceType' >> beam.Map(lambda x: (x['device_type'], x))
@@ -313,6 +331,7 @@ python3 src/pipeline.py \
     --runner=DataflowRunner \
     --project=${PROJECT_ID} \
     --region=${REGION} \
+    --service_account_email=${WORKER_SA} \
     --temp_location=${BUCKET_NAME}/temp \
     --staging_location=${BUCKET_NAME}/staging \
     --setup_file=./setup.py \
@@ -342,12 +361,13 @@ gcloud dataflow jobs list \
 Create a traffic generator capable of publishing on-time events, late events beyond the watermark, and malformed events:
 
 ```python
+import os
 import time
 import json
 from datetime import datetime, timezone, timedelta
 from google.cloud import pubsub_v1
 
-project_id = "<PROJECT_ID>"
+project_id = os.environ.get("PROJECT_ID", "<PROJECT_ID>")
 topic_id = "telemetry-events"
 
 publisher = pubsub_v1.PublisherClient()
@@ -398,7 +418,6 @@ send_payload({
 
 Execute the traffic generator:
 ```bash
-sed -i "s/<PROJECT_ID>/${PROJECT_ID}/g" generate_events.py
 python3 generate_events.py
 ```
 
@@ -441,7 +460,7 @@ gcloud storage cat $(gcloud storage ls ${BUCKET_NAME}/dlq/*.json | head -n 1)
 | Symptom | Root Cause | Remediation |
 | :--- | :--- | :--- |
 | **High System Lag (Watermark Stalled)** | Worker slot starvation or hotspotting key partition. | Increase `--max_num_workers`, verify key distribution (`CombinePerKey` hotkeys), enable Streaming Engine. |
-| **Storage Write API Permission Denied** | Worker Service Account lacks `bigquery.dataEditor` or `bigquery.write` permissions. | Grant `roles/bigquery.dataEditor` and `roles/bigquery.jobUser` to the Compute Engine default service account. |
+| **Storage Write API Permission Denied** | Worker Service Account lacks `bigquery.dataEditor` or `bigquery.write` permissions. | Grant `roles/bigquery.dataEditor` and `roles/bigquery.jobUser` to the dedicated worker service account (`sa-dataflow-worker`). |
 | **Data Dropped Silently** | Records arriving past `allowed_lateness` are discarded by Apache Beam default behavior. | Add a side output using `pvalue.TaggedOutput` for late data or adjust `allowed_lateness` parameter. |
 
 ---
@@ -451,10 +470,16 @@ gcloud storage cat $(gcloud storage ls ${BUCKET_NAME}/dlq/*.json | head -n 1)
 Drain the Dataflow streaming job and deprovision resources:
 
 ```bash
-# 1. Drain Dataflow job (allows in-flight elements to finish processing)
+# 1. Drain Dataflow job and wait for terminal state (allows in-flight elements to finish processing)
 JOB_ID=$(gcloud dataflow jobs list --status=active --region=${REGION} --format="value(id)")
 if [ -n "$JOB_ID" ]; then
+    echo "Draining Dataflow job ${JOB_ID}..."
     gcloud dataflow jobs drain ${JOB_ID} --region=${REGION}
+    echo "Waiting for Dataflow job ${JOB_ID} to complete draining..."
+    while [[ $(gcloud dataflow jobs show ${JOB_ID} --region=${REGION} --format="value(state)") =~ (Running|Draining) ]]; do
+        sleep 10
+    done
+    echo "Dataflow job drained successfully."
 fi
 
 # 2. Delete Pub/Sub resources

@@ -60,7 +60,22 @@ gcloud services enable \
     bigqueryreservation.googleapis.com
 ```
 
-### 2.3 Create the Lab Dataset
+### 2.3 Verify User IAM Permissions
+To create datasets, manage query jobs, and configure BI Engine reservations, ensure your user identity has the required administrative IAM roles:
+
+```bash
+USER_EMAIL=$(gcloud config get-value account)
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="user:${USER_EMAIL}" \
+    --role="roles/bigquery.admin"
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="user:${USER_EMAIL}" \
+    --role="roles/bigqueryreservation.admin"
+```
+
+### 2.4 Create the Lab Dataset
 Create a dataset in `us-central1` with default expiration and regional location matching source public datasets:
 
 ```bash
@@ -176,7 +191,6 @@ Let us execute a standard analytical query simulating an operational reporting d
 
 ```bash
 bq query --use_legacy_sql=false \
---format=prettyjson \
 "SELECT
     pickup_location_id,
     COUNT(*) AS total_trips,
@@ -192,14 +206,16 @@ GROUP BY
     pickup_location_id
 ORDER BY
     total_revenue DESC
-LIMIT 10;" > unpart_result.json
+LIMIT 10;"
+
+JOB_ID_UNPART=$(bq ls -j -n 1 --format=json | jq -r '.[0].id')
+bq show --format=prettyjson -j ${JOB_ID_UNPART} > unpart_job.json
 ```
 
 ### 4.2 Benchmark Query 2: Partitioned Table (Partition Pruning)
 
 ```bash
 bq query --use_legacy_sql=false \
---format=prettyjson \
 "SELECT
     pickup_location_id,
     COUNT(*) AS total_trips,
@@ -215,14 +231,16 @@ GROUP BY
     pickup_location_id
 ORDER BY
     total_revenue DESC
-LIMIT 10;" > part_result.json
+LIMIT 10;"
+
+JOB_ID_PART=$(bq ls -j -n 1 --format=json | jq -r '.[0].id')
+bq show --format=prettyjson -j ${JOB_ID_PART} > part_job.json
 ```
 
 ### 4.3 Benchmark Query 3: Partitioned and Clustered Table (Block Pruning)
 
 ```bash
 bq query --use_legacy_sql=false \
---format=prettyjson \
 "SELECT
     pickup_location_id,
     COUNT(*) AS total_trips,
@@ -238,11 +256,14 @@ GROUP BY
     pickup_location_id
 ORDER BY
     total_revenue DESC
-LIMIT 10;" > part_clust_result.json
+LIMIT 10;"
+
+JOB_ID_PART_CLUST=$(bq ls -j -n 1 --format=json | jq -r '.[0].id')
+bq show --format=prettyjson -j ${JOB_ID_PART_CLUST} > part_clust_job.json
 ```
 
 ### 4.4 Comparative Analysis Script
-Extract the execution plan statistics via Python or jq:
+Extract the execution plan statistics via Python:
 
 ```bash
 python3 -c "
@@ -251,21 +272,23 @@ import json
 def parse_job(file_path):
     with open(file_path) as f:
         data = json.load(f)
-    # If returned as raw CLI JSON array
+    stats = data.get('statistics', {}).get('query', {}) if isinstance(data, dict) else {}
     return {
-        'bytes_processed': data.get('totalBytesProcessed'),
-        'bytes_billed': data.get('totalBytesBilled'),
-        'slot_millis': data.get('totalSlotMs'),
-        'elapsed_ms': data.get('endTime', 0) - data.get('startTime', 0)
+        'bytes_processed': stats.get('totalBytesProcessed'),
+        'bytes_billed': stats.get('totalBytesBilled'),
+        'slot_millis': stats.get('totalSlotMs'),
+        'elapsed_ms': int(data.get('statistics', {}).get('endTime', 0)) - int(data.get('statistics', {}).get('startTime', 0)) if isinstance(data, dict) else 0
     }
 
 for name, fpath in [
-    ('Unpartitioned', 'unpart_result.json'),
-    ('Partitioned', 'part_result.json'),
-    ('Partitioned+Clustered', 'part_clust_result.json')
+    ('Unpartitioned', 'unpart_job.json'),
+    ('Partitioned', 'part_job.json'),
+    ('Partitioned+Clustered', 'part_clust_job.json')
 ]:
     print(f'=== {name} ===')
-    # Use bq show -j to get job details if output was query results
+    metrics = parse_job(fpath)
+    for k, v in metrics.items():
+        print(f'  {k}: {v}')
 "
 ```
 
@@ -382,20 +405,22 @@ bq show --format=prettyjson -j ${LAST_JOB_ID} | jq '.statistics.query.materializ
 BigQuery BI Engine is an in-memory analysis service built into BigQuery that accelerates SQL queries using a vectorized in-memory query engine.
 
 ### 6.1 Reserve BI Engine Capacity
-Allocate 2 GB of BI Engine memory in the `us-central1` region:
+Allocate 2 GB of BI Engine memory in the `us-central1` region using the official `bq update` command:
 
 ```bash
-gcloud bi-engine reservations create \
-    --project=${PROJECT_ID} \
+bq update --project_id=${PROJECT_ID} \
     --location=${REGION} \
-    --size=2147483648
+    --bi_reservation_size=2 \
+    --reservation
 ```
 
-*(Note: Size in bytes; 2147483648 = 2 GB).*
+*(Note: Reservation capacity size is specified in GiB; `2` allocates a 2 GiB in-memory cache).*
 
 ### 6.2 Verify BI Engine Reservation Status
+Inspect the active BI Engine reservation metadata:
+
 ```bash
-gcloud bi-engine reservations list --location=${REGION}
+bq show --project_id=${PROJECT_ID} --location=${REGION} --reservation
 ```
 
 ### 6.3 Execute BI Engine Accelerated Query
@@ -477,11 +502,11 @@ bq query --use_legacy_sql=false \
 To prevent recurring storage or in-memory reservation charges, execute:
 
 ```bash
-# 1. Delete BI Engine Reservation
-gcloud bi-engine reservations delete \
+# 1. Delete BI Engine Reservation (setting size to 0 GiB deallocates capacity)
+bq update --project_id=${PROJECT_ID} \
     --location=${REGION} \
-    --project=${PROJECT_ID} \
-    --quiet
+    --bi_reservation_size=0 \
+    --reservation
 
 # 2. Delete BigQuery Dataset and all contained tables & materialized views
 bq rm -r -f -d ${PROJECT_ID}:${DATASET_ID}

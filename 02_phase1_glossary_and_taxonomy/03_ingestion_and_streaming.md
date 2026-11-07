@@ -278,7 +278,7 @@ A ruggedized, high-capacity physical storage hardware appliance shipped directly
 
 ## 9. Comparative Ingestion Technology Matrix
 
-| Ingestion Technology | Data Pattern | Latency SLA | Protocol / Formats | Primary Destination | Databricks Analogue |
+| Ingestion Technology | Data Pattern | Typical Latency Profile (Engineering Estimate - Non-SLA) | Protocol / Formats | Primary Destination | Databricks Analogue |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Cloud Pub/Sub** | Streaming Events | 10–100ms | REST, gRPC (Avro, Protobuf, JSON) | Dataflow, BigQuery, GCS | Apache Kafka / AWS Kinesis |
 | **Pub/Sub Lite** | Streaming Partitions | 50–200ms | gRPC, Kafka API Shim | Dataflow, Compute VMs | Apache Kafka |

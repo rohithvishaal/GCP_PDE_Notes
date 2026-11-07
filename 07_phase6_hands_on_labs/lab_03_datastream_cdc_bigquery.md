@@ -66,7 +66,7 @@ gcloud services enable \
 ```
 
 ### 2.3 Provision Cloud SQL PostgreSQL Instance with Logical Decoding
-Cloud SQL requires specific database flags to enable logical WAL streaming:
+Cloud SQL requires specific database flags to enable logical WAL streaming. For standalone lab execution where Private Services Access (PSA) peering is not pre-configured, provision the instance directly with an external IP and authorized networks to support Datastream static IP connectivity:
 
 ```bash
 gcloud sql instances create ${DB_INSTANCE_NAME} \
@@ -76,20 +76,34 @@ gcloud sql instances create ${DB_INSTANCE_NAME} \
     --zone=${ZONE} \
     --root-password="${DB_PASSWORD}" \
     --database-flags=cloudsql.logical_decoding=on \
-    --network=projects/${PROJECT_ID}/global/networks/${NETWORK_NAME} \
-    --no-assign-ip
-```
-
-*(Note: In enterprise production, databases run without public IPs (`--no-assign-ip`). For this hands-on lab environment, if Private Service Access is not pre-configured, allow an authorized network or enable public IP with SSL enforcement).*
-
-Let us verify or enable public IP with authorized network for testing if running outside VPC peering:
-```bash
-gcloud sql instances patch ${DB_INSTANCE_NAME} \
     --assign-ip \
     --authorized-networks=0.0.0.0/0
 ```
+
 > [!WARNING]
 > Permitting `0.0.0.0/0` is strictly for temporary lab sandbox validation. In enterprise architectures, always utilize Datastream Private Connectivity configurations or IP allowlisting restricted to Google Cloud Datastream regional NAT IP blocks.
+
+### 2.4 Configure Datastream Service Agent BigQuery IAM Roles
+Datastream utilizes a Google-managed service agent to stream CDC events into BigQuery via the Storage Write API. Grant the service agent the required BigQuery permissions:
+
+```bash
+export PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format="value(projectNumber)")
+export DATASTREAM_SA="service-${PROJECT_NUMBER}@gcp-sa-datastream.iam.gserviceaccount.com"
+
+# Ensure Datastream service agent exists
+gcloud beta services identity create \
+    --service=datastream.googleapis.com \
+    --project=${PROJECT_ID}
+
+# Grant BigQuery permissions
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:${DATASTREAM_SA}" \
+    --role="roles/bigquery.dataEditor"
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:${DATASTREAM_SA}" \
+    --role="roles/bigquery.jobUser"
+```
 
 ---
 
@@ -198,7 +212,8 @@ gcloud datastream connection-profiles create pg-source-profile \
     --postgresql-port=5432 \
     --postgresql-username="datastream_cdc" \
     --postgresql-password="DatastreamSecret2026!" \
-    --postgresql-database="sales"
+    --postgresql-database="sales" \
+    --static-ip-connectivity
 ```
 
 ### 5.3 Create BigQuery Destination Connection Profile
@@ -208,7 +223,8 @@ Datastream features native zero-ETL integration with BigQuery:
 gcloud datastream connection-profiles create bq-dest-profile \
     --location=${REGION} \
     --type=bigquery \
-    --display-name="BigQuery CDC Destination"
+    --display-name="BigQuery CDC Destination" \
+    --static-ip-connectivity
 ```
 
 ### 5.4 Create and Activate Datastream Stream
@@ -311,21 +327,28 @@ FROM \`${PROJECT_ID}.${DATASET_ID}.orders\`;"
 ```
 
 ### 6.4 Query Optimization with `max_staleness`
-In BigQuery continuous CDC, tables maintain internal delta files. To guarantee zero staleness at query time:
+In BigQuery continuous CDC, tables maintain internal delta files. To guarantee zero staleness at query time, configure the table's `max_staleness` option via DDL:
 
 ```bash
+# Set max_staleness to 0 MINUTE to enforce continuous real-time merging
+bq query --use_legacy_sql=false \
+"ALTER TABLE \`${PROJECT_ID}.${DATASET_ID}.orders\`
+SET OPTIONS (
+    max_staleness = INTERVAL 0 MINUTE
+);"
+
+# Query the table with zero staleness guaranteed
 bq query --use_legacy_sql=false \
 "SELECT 
     order_id, 
     order_status, 
     order_total 
 FROM 
-    \`${PROJECT_ID}.${DATASET_ID}.orders\`
-OPTIONS(max_staleness = INTERVAL '0' MINUTE);"
+    \`${PROJECT_ID}.${DATASET_ID}.orders\`;"
 ```
 
 > [!TIP]
-> Setting `max_staleness = INTERVAL '0' MINUTE` forces BigQuery to apply all pending change records at query runtime. For BI dashboards where 5-minute freshness is acceptable, setting `max_staleness = INTERVAL '5' MINUTE` significantly reduces slot consumption by utilizing pre-materialized base snapshots.
+> Setting `max_staleness = INTERVAL 0 MINUTE` forces BigQuery to apply all pending change records at query runtime. For BI dashboards where 5-minute freshness is acceptable, setting `max_staleness = INTERVAL 5 MINUTE` significantly reduces slot consumption by utilizing pre-materialized base snapshots.
 
 ---
 

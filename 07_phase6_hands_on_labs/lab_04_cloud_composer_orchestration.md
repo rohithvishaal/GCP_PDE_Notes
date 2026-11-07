@@ -67,7 +67,13 @@ gcloud services enable \
     composer.googleapis.com \
     dataproc.googleapis.com \
     bigquery.googleapis.com \
-    storage.googleapis.com
+    storage.googleapis.com \
+    compute.googleapis.com
+
+# Enable Private Google Access on default subnetwork for Dataproc Serverless
+gcloud compute networks subnets update default \
+    --region=${REGION} \
+    --enable-private-ip-google-access
 ```
 
 ### 2.3 Create Cloud Storage Buckets & BigQuery Datasets
@@ -85,24 +91,41 @@ bq --location=${REGION} mk --dataset ${PROJECT_ID}:${DATASET_PROD}
 Dataproc Serverless and Cloud Composer require specific IAM permissions:
 
 ```bash
-# Get default Compute Engine Service Account
+# Get default Compute Engine Service Account and Project Number
 COMPUTE_SA=$(gcloud iam service-accounts list \
     --filter="displayName:Compute Engine default service account" \
     --format="value(email)")
+PROJECT_NUMBER=$(gcloud projects describe ${PROJECT_ID} --format="value(projectNumber)")
+COMPOSER_SA="service-${PROJECT_NUMBER}@cloudcomposer-accounts.iam.gserviceaccount.com"
 
-# Grant Dataproc Worker and BigQuery Admin roles
-gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:${COMPUTE_SA}" \
-    --role="roles/dataproc.worker"
+# Grant Dataproc Worker, BigQuery Admin, Storage Admin, and Composer Worker roles to environment SA
+for role in \
+    roles/dataproc.worker \
+    roles/bigquery.admin \
+    roles/storage.admin \
+    roles/composer.worker; do
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+        --member="serviceAccount:${COMPUTE_SA}" \
+        --role="${role}"
+done
 
+# Grant ServiceAgentV2Ext to Composer Service Agent
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:${COMPUTE_SA}" \
-    --role="roles/bigquery.admin"
-
-gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:${COMPUTE_SA}" \
-    --role="roles/storage.admin"
+    --member="serviceAccount:${COMPOSER_SA}" \
+    --role="roles/composer.ServiceAgentV2Ext"
 ```
+
+### 2.5 Provision Cloud Composer 2 Environment
+Create a small Cloud Composer 2 environment for the orchestration pipeline:
+
+```bash
+gcloud composer environments create ${COMPOSER_ENV} \
+    --location=${REGION} \
+    --image-version=composer-2.6.6-airflow-2.7.3 \
+    --service-account=${COMPUTE_SA} \
+    --environment-size=small
+```
+*(Note: Creation of a Cloud Composer environment typically takes 15–20 minutes).*
 
 ---
 
@@ -234,7 +257,7 @@ with DAG(
     # 1. GCS Landing Zone Sensor (Idempotent polling with timeout)
     wait_for_landing_data = GCSObjectsWithPrefixExistenceSensor(
         task_id='wait_for_landing_data',
-        bucket=BUCKET_DATA.replace("gs://", ""),
+        bucket="{{ var.value.bucket_data | replace('gs://', '') }}",
         prefix='landing/{{ ds_nodash }}/orders_',
         mode='reschedule',  # Releases Airflow worker slot while waiting
         poke_interval=60,
@@ -286,7 +309,7 @@ with DAG(
                 WHERE order_id IS NULL
             """,
             pass_value=0,
-            use_legacy_sql=false,
+            use_legacy_sql=False,
         )
 
         # Assert all order totals are non-negative
@@ -426,8 +449,8 @@ When the DAG executes, `assert_positive_order_totals` fails. Notice that:
 ## 7. Resource Cleanup
 
 ```bash
-# 1. Delete Composer Environment (if provisioned exclusively for this lab)
-# gcloud composer environments delete ${COMPOSER_ENV} --location=${REGION} --quiet
+# 1. Delete Composer Environment
+gcloud composer environments delete ${COMPOSER_ENV} --location=${REGION} --quiet
 
 # 2. Clean Storage Buckets
 gcloud storage rm -r ${BUCKET_CODE}

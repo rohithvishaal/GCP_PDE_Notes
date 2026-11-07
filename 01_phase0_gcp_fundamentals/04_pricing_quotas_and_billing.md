@@ -141,7 +141,7 @@ With BigQuery Editions, slots are organized into **Reservations** and assigned t
 bq mk --project_id=prj-admin-billing \
     --location=US \
     --reservation \
-    --target_job_rate=100 \
+    --target_job_concurrency=100 \
     --slots=500 \
     --autoscale_max_slots=1000 \
     prod_etl_reservation

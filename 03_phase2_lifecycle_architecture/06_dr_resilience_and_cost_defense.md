@@ -60,7 +60,7 @@ graph TD
 ### 2.1 Cloud Storage Dual-Region & Turbo Replication
 
 * **Standard Cross-Region Replication**: In a standard multi-region or dual-region bucket, Cloud Storage replicates objects asynchronously across paired regions. Standard replication does not provide a contractual time SLA, though 99.9% of objects replicate within 1 hour.
-* **Turbo Replication**: Designed explicitly for enterprise DR. Turbo Replication provides a contractual Google Cloud SLA guaranteeing that **100% of all newly written objects are replicated to the secondary region within 15 minutes**, regardless of object size or volume.
+* **Turbo Replication**: Designed explicitly for enterprise DR. Turbo Replication provides a contractual Google Cloud Storage SLA guaranteeing $\ge 99.9\%$ monthly volume conformance and $\ge 99.0\%$ monthly time conformance for objects replicated to the secondary region within 15 minutes, regardless of object size or volume.
 
 ```bash
 # Enable Turbo Replication on Dual-Region Production Landing Bucket

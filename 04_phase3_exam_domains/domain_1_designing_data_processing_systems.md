@@ -216,7 +216,7 @@ flowchart TD
 | :--- | :--- | :--- | :--- | :--- |
 | **Single Region** | 99.9% (Standard) | 0 within region (3 zones) | Total regional outage halts read/write | Baseline |
 | **Dual-Region (Standard)** | 99.95% | Up to 1–2 hours asynchronous | Immune to single-region loss; metadata failover | $\approx 2\times$ storage cost |
-| **Dual-Region + Turbo Replication** | 99.95% | **$\le$ 15 minutes (100% of data replication backed by SLA)** | Extreme resilience for strict RPO regulatory mandates | Premium per replication GB |
+| **Dual-Region + Turbo Replication** | 99.95% | **$\le$ 15 minutes (backed by SLA: $\ge 99.9\%$ monthly volume, $\ge 99.0\%$ monthly time conformance)** | Extreme resilience for strict RPO regulatory mandates | Premium per replication GB |
 | **Multi-Region** | 99.95% | Geographically dispersed across continental borders | Geo-redundant read availability | Lowest $/GB$ for geo-distributed users |
 
 ---
@@ -245,6 +245,13 @@ Data fidelity requires matching workload transactional guarantees to the engine'
 | **Cloud Dataflow** | Stream & Batch distributed processing | Software / Data Engineer | Apache Beam on managed workers | Millisecond streaming from Pub/Sub, complex windowing, custom DoFn transformations, exactly-once sinks |
 | **Cloud Data Fusion** | Code-free / Low-code Visual ETL | ETL Developer / Business Analyst | CDAP executing on ephemeral Dataproc Spark | Drag-and-drop integration pipelines with 150+ pre-built enterprise connectors |
 | **BigQuery Studio + Gemini** | LLM-assisted SQL generation | Analyst / Data Scientist | BigQuery GoogleSQL + Vertex AI foundation models | Natural language to SQL query generation, automated query explanation, and schema exploration |
+
+#### 3.1 Prompting LLMs for Query Generation (Gemini in BigQuery Studio)
+Under the official PDE Exam Guide (v4.2), data engineers must understand how to leverage foundation models (Gemini) within BigQuery Studio for assisted data preparation and query engineering:
+- **Natural Language to SQL**: Gemini in BigQuery Studio translates natural language task descriptions directly into GoogleSQL queries, automatically incorporating referenced table schemas, column types, and partition keys.
+- **Context-Aware Prompt Engineering**: Effective prompt engineering for query generation requires providing explicit domain constraints, target partition filters, and expected aggregation levels in the prompt (e.g., `Generate a query calculating 7-day rolling average revenue grouped by store_id, filtering on _PARTITIONDATE >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)`).
+- **Code Explanation & Performance Tuning**: Gemini inspects complex multi-join SQL and identifies redundant full-table scans, missing clustering filters, or Cartesian products, suggesting optimized rewrites.
+- **Automated Validation Assertions**: Data engineers can prompt Gemini to generate Dataform SQLX assertion blocks or SQL data quality checks (e.g., verifying that `order_total > 0` and `customer_id IS NOT NULL`).
 
 ---
 

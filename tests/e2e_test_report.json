@@ -1,0 +1,318 @@
+{
+  "timestamp": "2026-11-07T10:31:59.632628+00:00",
+  "total_tests": 33,
+  "passed": 33,
+  "failed": 0,
+  "errors": 0,
+  "skipped": 0,
+  "pass_rate_percentage": 100.0,
+  "total_duration_sec": 0.1961,
+  "tiers": {
+    "tier_1": {
+      "name": "Tier 1 (Feature Coverage)",
+      "total": 8,
+      "passed": 8,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tier_2": {
+      "name": "Tier 2 (Boundary & Corner Cases)",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tier_3": {
+      "name": "Tier 3 (Cross-Feature & Traceability)",
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tier_4": {
+      "name": "Tier 4 (Real-World Execution Scenarios)",
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "tier_5": {
+      "name": "Tier 5 (Adversarial Hardening)",
+      "total": 10,
+      "passed": 10,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "results": [
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_01_repository_files_exist_on_disk",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts that 100% of the 49 census files exist physically on disk.",
+      "duration_sec": 0.0004,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_02_repository_file_census_evaluated_in_findings",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts that all 49 files are explicitly inventoried and evaluated in FILE_BY_FILE_FINDINGS.md.",
+      "duration_sec": 0.0004,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_03_official_gcp_documentation_citation_completeness",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts every finding in FILE_BY_FILE_FINDINGS.md cites an official Google Cloud doc URL.",
+      "duration_sec": 0.0003,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_04_performance_claim_classification_categories",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts quantitative performance claims are classified across Categories A, B, C, and D.",
+      "duration_sec": 0.0003,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_05_exam_guide_mapping_all_19_objectives",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts all 19 official PDE exam guide sub-objectives are classified in EXAM_COVERAGE_MATRIX.md.",
+      "duration_sec": 0.0044,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_06_mock_exam_question_structure_and_explanations",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Checks mock questions in Phase 7 for scenario stem, 4 choices, answer, and explanations.",
+      "duration_sec": 0.0008,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_07_audit_deliverables_existence",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts that all 7 formal audit files exist in docs/audits/ and are non-empty.",
+      "duration_sec": 0.0001,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier1_feature_coverage.TestTier1FeatureCoverage.test_08_root_governance_files_existence",
+      "tier": "Tier 1 (Feature Coverage)",
+      "status": "PASS",
+      "description": "Asserts that all 3 root governance files exist and are non-empty.",
+      "duration_sec": 0.0,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier2_boundary_corner.TestTier2BoundaryCornerCases.test_01_git_tracking_docs_not_ignored",
+      "tier": "Tier 2 (Boundary & Corner Cases)",
+      "status": "PASS",
+      "description": "Asserts that .gitignore does not ignore docs/ so audit deliverables can be tracked.",
+      "duration_sec": 0.0001,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier2_boundary_corner.TestTier2BoundaryCornerCases.test_02_internal_relative_link_integrity",
+      "tier": "Tier 2 (Boundary & Corner Cases)",
+      "status": "PASS",
+      "description": "Asserts zero broken internal relative markdown links across all repository markdown files.",
+      "duration_sec": 0.0357,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier2_boundary_corner.TestTier2BoundaryCornerCases.test_03_markdown_code_block_fence_balance",
+      "tier": "Tier 2 (Boundary & Corner Cases)",
+      "status": "PASS",
+      "description": "Asserts every markdown document has balanced triple-backtick code fences (even count).",
+      "duration_sec": 0.0154,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier2_boundary_corner.TestTier2BoundaryCornerCases.test_04_markdown_code_blocks_non_empty_content",
+      "tier": "Tier 2 (Boundary & Corner Cases)",
+      "status": "PASS",
+      "description": "Asserts that code blocks contain valid syntax and are not dangling empty blocks.",
+      "duration_sec": 0.0163,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier3_traceability.TestTier3Traceability.test_01_matrix_and_tracker_objectives_consistency",
+      "tier": "Tier 3 (Cross-Feature & Traceability)",
+      "status": "PASS",
+      "description": "Asserts consistency in 19 objectives and domain weights between tracker and matrix.",
+      "duration_sec": 0.0025,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier3_traceability.TestTier3Traceability.test_02_remediation_backlog_p0_p1_logged_in_changelog",
+      "tier": "Tier 3 (Cross-Feature & Traceability)",
+      "status": "PASS",
+      "description": "Asserts all P0 and P1 issues from REMEDIATION_BACKLOG.md are logged in root CHANGELOG.md.",
+      "duration_sec": 0.0027,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier3_traceability.TestTier3Traceability.test_03_official_sources_registry_traceability",
+      "tier": "Tier 3 (Cross-Feature & Traceability)",
+      "status": "PASS",
+      "description": "Asserts SOURCES.md catalogs official GCP documentation references with review metadata.",
+      "duration_sec": 0.0002,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier3_traceability.TestTier3Traceability.test_04_lab_coverage_consistency_with_phase6_files",
+      "tier": "Tier 3 (Cross-Feature & Traceability)",
+      "status": "PASS",
+      "description": "Asserts that the 4 hands-on labs in the tracker map 1:1 to physical files in 07_phase6_hands_on_labs/.",
+      "duration_sec": 0.0002,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_01_lab04_composer_dag_ast_and_keywords",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Verifies Python Airflow DAG in Lab 04 parses cleanly via AST and contains no lowercase 'false'.",
+      "duration_sec": 0.001,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_02_lab01_bi_engine_cli_anti_hallucination",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Asserts Lab 01 does not contain hallucinated 'gcloud bi-engine' commands.",
+      "duration_sec": 0.0002,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_03_cli_cheat_sheet_anti_hallucination",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Checks CLI cheat sheet for non-existent flags and invalid dual-region / BI Engine syntax.",
+      "duration_sec": 0.0002,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_04_lab03_datastream_connectivity_and_sql_syntax",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Checks Lab 03 for valid Datastream connectivity flags and BigQuery SQL syntax.",
+      "duration_sec": 0.0004,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_05_mock_exam1_beam_trigger_syntax",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Checks Exam 1 Question 2 for impossible Beam trigger syntax 'late=AfterWatermark()'.",
+      "duration_sec": 0.0002,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_06_turbo_replication_sla_accuracy",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Asserts Turbo Replication is not characterized with an unsupported '100% SLA' claim.",
+      "duration_sec": 0.0003,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier4_execution_scenarios.TestTier4ExecutionScenarios.test_07_all_lab_python_code_blocks_ast_validity",
+      "tier": "Tier 4 (Real-World Execution Scenarios)",
+      "status": "PASS",
+      "description": "Asserts all standalone Python code blocks in Phase 6 labs parse without SyntaxError.",
+      "duration_sec": 0.0023,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_01_repo_wide_executable_code_blocks_unicode_sanitization",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Ensure no typographic smart quotes, em-dashes, or non-breaking spaces exist in executable code blocks.",
+      "duration_sec": 0.0077,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_02_bash_code_blocks_whitespace_and_continuation_robustness",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Ensure no bash line continuation backslashes are followed by trailing whitespace.",
+      "duration_sec": 0.0077,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_03_repo_wide_python_ast_static_analysis",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Parse 100% of standalone Python code blocks across all markdown files via Python AST.",
+      "duration_sec": 0.0114,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_04_beam_pipeline_runtime_trigger_execution_harness",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Verify Apache Beam window trigger expressions instantiate cleanly in a simulated runtime harness.",
+      "duration_sec": 0.0048,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_05_bigquery_sql_ddl_and_clustering_limit_verification",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Ensure all BigQuery CLUSTER BY clauses adhere to the maximum 4-column limit and valid DDL.",
+      "duration_sec": 0.0156,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_06_repo_wide_cli_anti_hallucination_exhaustive",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Exhaustive negative test: Assert zero occurrences of 11 hallucinated GCP CLI commands/flags across curriculum files.",
+      "duration_sec": 0.0236,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_07_mock_exam_engine_deterministic_answer_keys",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Verify that all 30 mock questions have unambiguous single best answers and distractor explanations.",
+      "duration_sec": 0.0015,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_08_exam_guide_19_objectives_mathematical_weights_and_remediation",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Verify that all 19 exam guide objectives sum to 100% and are Fully Covered (FC).",
+      "duration_sec": 0.0001,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_09_audit_and_remediation_backlog_closed_loop_traceability",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Verify 1:1 bijection of all 18 P0 and 24 P1 issues between Backlog and CHANGELOG.",
+      "duration_sec": 0.0011,
+      "details": ""
+    },
+    {
+      "test_id": "tests.test_tier5_adversarial_hardening.TestTier5AdversarialHardening.test_10_relative_link_no_absolute_schemes_and_case_sensitivity",
+      "tier": "Tier 5 (Adversarial Hardening)",
+      "status": "PASS",
+      "description": "Stress-test: Ensure zero absolute URIs, zero backslashes in Markdown link targets, and exact case match on disk.",
+      "duration_sec": 0.0237,
+      "details": ""
+    }
+  ]
+}

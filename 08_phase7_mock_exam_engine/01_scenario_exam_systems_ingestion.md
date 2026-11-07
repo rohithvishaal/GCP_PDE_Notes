@@ -29,7 +29,7 @@ VPC Service Controls (VPC-SC) is Google Cloud's primary defense-in-depth boundar
 ### Question 2 (Domain 2: Streaming Ingestion & Watermarks)
 **Scenario**: You are maintaining a real-time fraud detection pipeline on Google Cloud Dataflow using the Apache Beam Python SDK. The pipeline reads debit card transactions from Cloud Pub/Sub, windows them into 5-minute fixed windows based on transaction timestamp, and detects abnormal velocity. During network drops in cellular point-of-sale terminals, transactions can arrive up to 30 minutes late. Business stakeholders require preliminary fraud scores within 10 seconds of message ingestion, but the analytical fraud count per card must incorporate late transactions arriving within 30 minutes without dropping them. How should you design the windowing and triggering strategy?
 
-- **A.** Use 5-minute fixed event-time windows with `AfterWatermark(early=AfterProcessingTime(10), late=AfterWatermark())`, an `allowed_lateness` of 30 minutes, and `AccumulationMode.ACCUMULATING`.
+- **A.** Use 5-minute fixed event-time windows with `AfterWatermark(early=AfterProcessingTime(10), late=AfterCount(1))`, an `allowed_lateness` of 30 minutes, and `AccumulationMode.ACCUMULATING`.
 - **B.** Use 5-minute sliding windows with `AfterWatermark(pastEndOfWindow())`, an `allowed_lateness` of 0 seconds, and `AccumulationMode.DISCARDING`.
 - **C.** Use 5-minute processing-time windows with a trigger firing every 10 seconds and write all records arriving after 5 minutes to a Dead-Letter Queue.
 - **D.** Use Session windows with a 30-minute gap duration and configure Dataflow Streaming Engine with autoscaling enabled.
@@ -41,7 +41,7 @@ In Apache Beam streaming architectures:
 1. Event-time windowing assigns data to windows based on when the transaction physically occurred at the point of sale.
 2. `allowed_lateness(timedelta(minutes=30))` explicitly tells the Dataflow runner to preserve window state in the Streaming Engine backend for 30 minutes past the watermark. Any record arriving within that 30-minute window will not be dropped.
 3. Speculative early triggers (`early=AfterProcessingTime(10)`) fire preliminary calculations every 10 seconds before the watermark reaches the end of the window, satisfying the requirement for real-time fraud scores.
-4. Late triggers (`late=...`) re-fire the window computation whenever late data arrives before the allowed lateness boundary expires.
+4. Late triggers (`late=AfterCount(1)`) re-fire the window computation whenever late data arrives before the allowed lateness boundary expires.
 5. `AccumulationMode.ACCUMULATING` ensures that each firing includes prior event counts plus the new late data, rather than emitting a detached delta.
 
 #### Why Each Incorrect Option Fails
@@ -316,7 +316,7 @@ Cloud Pub/Sub provides a native **BigQuery Subscription** type:
 **Correct Answer**: **B**
 
 #### Deep Architectural Explanation
-1. **Dual-Region with Turbo Replication**: Cloud Storage dual-region buckets replicate objects across two specific paired regions. Enabling **Turbo Replication** provides a 100% SLA guaranteeing that 99.9% of all objects replicate to the secondary region within **15 minutes**, perfectly satisfying the RPO < 15 minutes requirement.
+1. **Dual-Region with Turbo Replication**: Cloud Storage dual-region buckets replicate objects across two specific paired regions. Enabling **Turbo Replication** is backed by a contractual Google Cloud SLA guaranteeing $\ge 99.9\%$ monthly volume conformance and $\ge 99.0\%$ monthly time conformance for replication to the secondary region within **15 minutes**, perfectly satisfying the RPO < 15 minutes requirement.
 2. **Infrastructure as Code (IaC)**: Maintaining declarative templates (Terraform / Composer) allows rapid automated provisioning of compute clusters in the surviving region within the 1-hour RTO, without incurring the ongoing cost of running idle compute 24/7.
 
 #### Why Each Incorrect Option Fails

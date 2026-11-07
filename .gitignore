@@ -1,3 +1,18 @@
-docs/
+# Archives and patches
 *.zip
 *.patch
+
+# Multi-agent teamwork logs and orchestration workspaces
+.agents/
+
+# Python caches and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# System and editor temporary files
+.DS_Store
+Thumbs.db
+*.tmp
+

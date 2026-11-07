@@ -5,7 +5,7 @@ A global fintech and banking platform processes **40,000 credit card authorizati
 
 ### The Two Interconnected Core Requirements:
 1. **Sub-15ms Real-Time Fraud Inference & Transaction Gating**:
-   Every swipe or online checkout must be evaluated against a machine learning fraud model within a strict **15ms roundtrip SLA**. The pipeline must fetch fresh feature vectors (e.g., *number of failed PIN attempts in last 10 minutes*, *velocity of transactions across merchant categories*), execute model inference, check account balances, and atomically lock/commit ledger rows.
+   Every swipe or online checkout must be evaluated against a machine learning fraud model within a strict **15ms roundtrip internal latency target / SLO**. The pipeline must fetch fresh feature vectors (e.g., *number of failed PIN attempts in last 10 minutes*, *velocity of transactions across merchant categories*), execute model inference, check account balances, and atomically lock/commit ledger rows.
 2. **Enterprise Retrieval-Augmented Generation (RAG) Customer Copilot**:
    A generative support engine powered by Gemini must answer user inquiries (e.g., *"Why was transaction #9821 flagged?"* or *"What is my dispute eligibility under Policy 44B?"*) grounded in real-time knowledge embeddings and customer account transaction history, without hallucination.
 
@@ -15,7 +15,7 @@ A global fintech and banking platform processes **40,000 credit card authorizati
 
 ```mermaid
 flowchart TD
-    subgraph Fraud Transaction Path: Sub-15ms SLA
+    subgraph Fraud Transaction Path: Sub-15ms Latency SLO
         CardSwipe[POS Terminal / Checkout API] -->|Auth Request| AuthEngine[Payment Authorization Engine]
         
         AuthEngine -->|1. Fetch Online Features <5ms| VFS_Online[(Vertex AI Feature Store<br/>Optimized Online Store - Bigtable)]
@@ -179,9 +179,9 @@ sequenceDiagram
 
 ---
 
-## 6. Drift Monitoring, SLAs & Failure Modes
+## 6. Drift Monitoring, SLO Targets & Failure Modes
 
-| Component / Layer | Metric / SLA Threshold | Failure Mode | Mitigation & Fail-Safe Mechanism |
+| Component / Layer | Metric / SLO Target | Failure Mode | Mitigation & Fail-Safe Mechanism |
 | :--- | :--- | :--- | :--- |
 | **Online Feature Store** | Read Latency: **p99 < 8ms** | Bigtable node saturation or network throttling | **Circuit Breaker**: If feature lookup exceeds 8ms, fallback to pre-cached baseline risk features stored in Redis/App memory. |
 | **Vertex AI Endpoint** | Inference Latency: **p99 < 6ms** | Model container crash or quota limit | **Shadow Fallback**: Route to lightweight rule-based heuristic scoring engine; fail closed on high-risk amounts (>\$5,000), fail open on micro-transactions. |

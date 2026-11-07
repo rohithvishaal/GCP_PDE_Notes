@@ -12,7 +12,7 @@
 Junior engineers ask: *"What features does this service have?"*  
 **Principal Data Engineers ask**:
 1. *What is the access pattern (point read by key vs. full-table scan)?*
-2. *What is the latency SLA (microseconds, single-digit milliseconds, seconds, or minutes)?*
+2. *What is the latency target / application SLO (microseconds, single-digit milliseconds, seconds, or minutes)?*
 3. *What is the write velocity and concurrency (100 QPS vs. 1,000,000 QPS)?*
 4. *What are the consistency and failure boundaries (Strict ACID across regions vs. Eventual consistency)?*
 5. *What is the total operational overhead and developer ecosystem gravity (Serverless SQL vs. Custom Beam/Spark pipelines)?*
@@ -29,7 +29,7 @@ Every data requirement must be filtered through these six non-negotiable vectors
 ```mermaid
 flowchart TD
     V1["1. Access Pattern & Query Nature\n(Key-Value Lookup vs OLAP Scan vs Search)"] --> Decision{"Architecture Engine"}
-    V2["2. Latency SLA\n(Sub-10ms vs Sub-second vs Batch Minutes)"] --> Decision
+    V2["2. Latency Target / SLO\n(Sub-10ms vs Sub-second vs Batch Minutes)"] --> Decision
     V3["3. Ingestion Velocity & Volume\n(Continuous Streaming vs Micro-batch vs Nightly)"] --> Decision
     V4["4. Consistency & ACID Scope\n(Single-node ACID vs Planetary TrueTime vs Eventual)"] --> Decision
     V5["5. Operational Burden\n(No-Ops Serverless vs Managed Cluster Tuning)"] --> Decision
@@ -44,7 +44,7 @@ flowchart TD
 - **Full-Text / Vector Similarity Search**: BigQuery Vector Search, Vertex AI Vector Search.
 - **Raw Object Retrieval (`GET /blob/image.png`)**: Cloud Storage (GCS).
 
-### Vector 2: Latency SLA
+### Vector 2: Latency Profile / Application SLO (Operational Targets)
 - **Sub-millisecond ($\le 1\text{ms}$)**: Memorystore (Redis/Memcached in-memory cache).
 - **Single-digit millisecond ($5 - 10\text{ms}$)**: Cloud Bigtable, Firestore, Cloud SQL / AlloyDB primary reads.
 - **Sub-second ($100 - 800\text{ms}$)**: BigQuery with BI Engine in-memory acceleration, Cloud Spanner global reads.
@@ -205,10 +205,10 @@ flowchart TD
 ## 7. Real-World Scenario Deconstructions: How a Principal Thinks
 
 ### Scenario A: Real-Time Fraud Detection Engine
-- **Business Requirement**: Process 40,000 payment authorizations per second. Every transaction must be validated against customer profile features and account balances with a hard SLA of $<15\text{ms}$ roundtrip before approving the credit card swipe.
+- **Business Requirement**: Process 40,000 payment authorizations per second. Every transaction must be validated against customer profile features and account balances with a strict latency target / application SLO of $<15\text{ms}$ roundtrip before approving the credit card swipe.
 - **Architectural Thought Process**:
   1. *Can BigQuery do this?* **No**. BigQuery query latency is 1–3 seconds minimum. Reject.
-  2. *Can Cloud SQL handle 40k QPS writes with $<15\text{ms}$ SLA?* **No**. Vertical scale limit, locking contention on balance tables. Reject.
+  2. *Can Cloud SQL handle 40k QPS writes with $<15\text{ms}$ latency target?* **No**. Vertical scale limit, locking contention on balance tables. Reject.
   3. *What engine can read customer feature vectors in $<5\text{ms}$ at 40k QPS?* **Cloud Bigtable** or **Memorystore (Redis)**.
   4. *What engine must guarantee strict ACID financial consistency for balance debits across multiple regions with zero split-brain?* **Cloud Spanner** with TrueTime.
 - **Winning Architecture**:

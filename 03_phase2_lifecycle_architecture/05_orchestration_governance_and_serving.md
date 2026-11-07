@@ -392,12 +392,12 @@ BI Engine is an in-memory analysis service built natively into BigQuery. It acce
 - **Smart Tuning / Zero Management**: Requires no manual index creation or ETL cache maintenance. BigQuery automatically invalidates the cache when the underlying partition is updated by an upstream pipeline.
 
 ```bash
-# Reserve 50 GB of BI Engine RAM for the us-central1 analytics processing project
-gcloud bi-engine capacities create \
-    --project=retailflow-prod \
+# Reserve 50 GiB of BI Engine RAM for the us-central1 analytics processing project
+bq update \
+    --project_id=retailflow-prod \
     --location=us-central1 \
-    --preferred-tables="retailflow-prod.marts_curated.fact_daily_omnichannel_sales,retailflow-prod.marts_curated.dim_customers_scd2" \
-    --size-gb=50
+    --bi_reservation_size=50 \
+    --reservation
 ```
 
 ### 5.2 Analytics Hub & Data Clean Rooms

@@ -135,11 +135,11 @@ graph LR
 - A distinct geographic location with **three or more zones**.
 - Examples: `us-central1` (Iowa), `europe-west1` (Belgium), `asia-east1` (Taiwan).
 - Inter-zone latency inside a region is < 1ms. Cross-region latency varies from 10ms to 200ms+.
-- Storage in a regional bucket or single-region BigQuery dataset provides 99.99% availability and guarantees strict data sovereignty (data never leaves the country/region boundary).
+- Storage in a regional bucket (99.9% availability SLA for Standard class) or single-region BigQuery dataset (99.9% Standard, 99.99% Enterprise) guarantees strict data sovereignty (data never leaves the country/region boundary).
 
 ### 4.3 Dual-Region
 - Specific to Cloud Storage: Spans two specific regions (e.g., `nam4` for `us-central1` and `us-east4`).
-- Provides active-active replication with an RPO (Recovery Point Objective) of 0 for object data via Turbo Replication (15-minute SLA for 100% of replicated data).
+- Provides active-active replication with low RPO for object data via Turbo Replication (15-minute SLA guaranteeing $\ge 99.9\%$ monthly volume conformance and $\ge 99.0\%$ monthly time conformance).
 - Ideal for critical staging lakes feeding analytics pipelines that require cross-region disaster recovery without paying for full multi-region spread.
 
 ### 4.4 Multi-Region
