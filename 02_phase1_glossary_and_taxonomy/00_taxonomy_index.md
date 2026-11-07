@@ -106,7 +106,102 @@ graph TD
 
 ---
 
-## 4. Phase 1 Document Guide
+---
+
+## 4. Renamed, Retired & Overloaded Product Names (Exam Watchlist)
+
+Google Cloud services frequently evolve, but certification questions occasionally use older terminology or test your awareness of modern replacements:
+
+| Historical / Older Name | Current Product Name | Critical Architectural Context |
+|---|---|---|
+| **Cloud Data Loss Prevention (Cloud DLP)** | **Sensitive Data Protection** | The exam guide frequently still uses "Cloud DLP". It inspects, masks, and tokenizes PII. |
+| **Data Catalog** | **Dataplex Catalog** | Data Catalog has been unified into Dataplex as the enterprise metadata catalog and policy taxonomy engine. |
+| **Data Studio** | **Looker Studio** | Web-based visualization tool (Looker Studio Pro adds enterprise management). |
+| **Flat-Rate BigQuery Pricing** | **BigQuery Editions (Standard, Enterprise, Enterprise Plus)** | Flat-rate has been replaced by autoscaling and committed slot capacity tiers. |
+| **AI Platform** | **Vertex AI** | Unified machine learning platform (Feature Store, Vector Search, Workbench). |
+| **`gsutil` CLI** | **`gcloud storage`** | Modern, high-performance CLI for Cloud Storage (up to 9x faster parallel multi-thread transfers). |
+| **Stackdriver** | **Cloud Monitoring & Cloud Logging** | Observability, metric alerting, and log sinks. |
+| **Cloud Datastore** | **Firestore (in Datastore Mode)** | Document NoSQL store for web and mobile backends. |
+| **Dataproc Serverless** | **Serverless Spark on Dataproc** | Clusterless batch execution of PySpark and Spark SQL without GCE cluster provisioning. |
+
+---
+
+## 5. Phase 1 Multi-Product Knowledge Checks
+
+These scenario-based checks deliberately combine multiple services to test architectural reasoning across the taxonomy.
+
+### Check 1.1 (Single-Select: Ingestion Guarantees & Idempotency)
+ShopSphere's streaming pipeline reads orders from Cloud Pub/Sub and streams them into BigQuery via Dataflow. Financial auditors discover that certain high-volume promotional order events are recorded twice in downstream tables. What is the root architectural cause, and what is the proper engineering defense?
+
+- [ ] A. Pub/Sub delivers messages with **at-least-once delivery by default** due to publisher retries or subscriber ack timeouts. The downstream pipeline must deduplicate records using an immutable `event_id` or perform an idempotent `MERGE` into curated BigQuery tables.
+- [ ] B. Pub/Sub guarantees exactly-once delivery in all configurations; the bug is caused by BigQuery streaming buffer corruption.
+- [ ] C. Cloud Pub/Sub should be replaced with Cloud Storage CSV drops.
+- [ ] D. Increase the number of Cloud Dataflow worker machines to eliminate backpressure.
+
+**Correct Answer**: **A**  
+*Explanation*: Distributed messaging systems like Pub/Sub achieve high throughput and resilience via at-least-once semantics. Retries caused by transient network timeouts can cause duplicate deliveries. Pipelines must be designed defensively using unique idempotency keys (`event_id`) and deduplication transforms.  
+*Docs*: [Pub/Sub Overview](https://cloud.google.com/pubsub/docs/overview).
+
+---
+
+### Check 1.2 (Single-Select: CDC Replication vs Event Streaming)
+ShopSphere needs continuous, near-real-time replication of its production Cloud SQL PostgreSQL transaction database into BigQuery for inventory dashboards with minimal engineering overhead and zero custom code. Which service should you recommend?
+
+- [ ] A. **Datastream**.
+- [ ] B. Write custom microservice code to publish every database insert/update to Cloud Pub/Sub.
+- [ ] C. A nightly Apache Spark job on Cloud Dataproc.
+- [ ] D. Cloud Composer Airflow DAG polling the database table every 30 seconds.
+
+**Correct Answer**: **A**  
+*Explanation*: Datastream is Google Cloud's serverless Change Data Capture (CDC) service. It reads directly from database transaction logs (PostgreSQL WAL via `pgoutput`) without impacting OLTP query performance and streams changes directly into BigQuery.  
+*Docs*: [Datastream Overview](https://cloud.google.com/datastream/docs/overview).
+
+---
+
+### Check 1.3 (Multi-Select: Choose TWO - Matching Products to Workloads)
+Which two statements accurately reflect Google Cloud architectural best practices?
+
+- [ ] A. **Dataform** runs SQL transformations directly inside BigQuery and uses declarative assertions for automated data quality gates.
+- [ ] B. **Cloud Composer** is the optimal engine for executing heavy, distributed data transformations directly inside its Airflow workers.
+- [ ] C. **Cloud Bigtable** is the recommended store for running complex ad-hoc analytical SQL joins across multi-terabyte tables.
+- [ ] D. **Cloud Dataproc** is the natural choice for migrating legacy on-premise Apache Spark and Hadoop workloads with minimal code rewrites.
+- [ ] E. **Cloud Storage** allows updating individual rows in-place inside an existing Parquet object.
+
+**Correct Answers**: **A and D**  
+*Explanation*: Dataform provides Git-managed, in-warehouse ELT for BigQuery. Dataproc is the managed open-source platform designed to lift-and-shift Spark/Hadoop code. Cloud Composer orchestrates pipelines but should NEVER execute data processing on Airflow worker nodes. Bigtable does not support native SQL joins (that is BigQuery's role). Cloud Storage objects are immutable; updating a single row requires overwriting the entire object.  
+*Docs*: [Dataform Overview](https://cloud.google.com/dataform/docs/overview) and [Dataproc Overview](https://cloud.google.com/dataproc/docs/concepts/overview).
+
+---
+
+### Check 1.4 (Single-Select: Operational Serving vs Analytical Warehousing)
+ShopSphere's real-time checkout recommendation engine requires sub-10ms key-value lookups of customer profile feature vectors at 50,000 requests per second. Concurrently, data scientists require full SQL aggregation and window function queries over the same historical features. Which architecture satisfies both requirements?
+
+- [ ] A. Serve real-time lookups from **Cloud Bigtable**, and stream historical records into **BigQuery** for analytical SQL.
+- [ ] B. Store all features solely in **BigQuery** and have the real-time checkout service query BigQuery directly via SQL.
+- [ ] C. Store all features solely in a single **Cloud SQL for PostgreSQL** instance.
+- [ ] D. Write features to Cloud Storage and launch a transient Dataproc cluster on every customer checkout.
+
+**Correct Answer**: **A**  
+*Explanation*: Bigtable delivers single-digit millisecond point lookups at massive horizontal scale for operational serving. BigQuery is optimized for multi-second complex columnar analytical aggregations. Combining them leverages each system for its intended design.  
+*Docs*: [Bigtable Overview](https://cloud.google.com/bigtable/docs/overview).
+
+---
+
+### Check 1.5 (Single-Select: Cost Optimization of Batch Processing)
+A nightly 2-hour PySpark ETL pipeline runs on a long-running, 10-node Cloud Dataproc cluster that remains active 24/7. Finance reports that cluster infrastructure costs are exorbitant. What is the most cost-effective architectural change?
+
+- [ ] A. Automate the pipeline using Cloud Composer to provision an **ephemeral Dataproc cluster** (or Dataproc Serverless batch) with data stored in Cloud Storage, and automatically tear down the cluster upon job completion.
+- [ ] B. Upgrade the cluster to larger VM machine types so the job finishes in 1 hour.
+- [ ] C. Migrate the PySpark workload to run on Cloud SQL.
+- [ ] D. Disable autoscaling on the cluster and keep the 10 nodes running continuously.
+
+**Correct Answer**: **A**  
+*Explanation*: Ephemeral (job-scoped) Dataproc clusters decouple compute from storage by reading from and writing to Cloud Storage (`gs://`). You pay for VM compute only while the 2-hour job is actively running, eliminating 22 hours of idle infrastructure billing per day.  
+*Docs*: [Dataproc Ephemeral Clusters](https://cloud.google.com/dataproc/docs/concepts/overview).
+
+---
+
+## 6. Phase 1 Document Guide
 
 To examine deep technical specifications, architectural designs, trade-offs, and exam notes, proceed to the domain deep-dive chapters:
 - [01. Cloud & Infrastructure Architecture](./01_cloud_and_infrastructure.md): Borg, Colossus, Jupiter, Andromeda, Ephemeral Compute.

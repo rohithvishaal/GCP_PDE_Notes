@@ -1,10 +1,26 @@
 # Resource Hierarchy, Tenancy & Regional Architecture
 
+**Tag**: Required (Exam Objective 1.1: Designing project, dataset, and table architecture for governance; dev vs. prod environments; data sovereignty)  
+**Sources**: Official Google Cloud Documentation + PDE Exam Syllabus + Enterprise Architect Commentary
+
+---
+
 ## 1. Architectural Overview & The GCP Tenancy Model
 
-Google Cloud structures all infrastructure, compute, and data assets within a strict, multi-tiered directed acyclic tree known as the **Resource Hierarchy**. Unlike platforms where compute clusters or metastores sit at the tenancy root, Google Cloud anchors identity, billing, network boundaries, and administrative governance to this hierarchy.
+### 1.1 What Is It?
+Google Cloud structures all infrastructure, compute, and data assets within a strict, multi-tiered directed acyclic tree known as the **Resource Hierarchy**:
+$$\text{Organization} \longrightarrow \text{Folders} \longrightarrow \text{Projects} \longrightarrow \text{Resources}$$
 
-For a Principal Data Architect or an engineer transitioning from Databricks and AWS environments, understanding this hierarchy is critical. Misunderstanding the boundary of a **Project** or how inheritance flows from an **Organization** or **Folder** will lead to broken security boundaries, quota exhaustion across pipelines, or uncontained blast radiuses during pipeline failures.
+> [!NOTE]
+> **The Plain-English Analogy**: Think of a corporate enterprise headquarters.
+> - The **Organization** is the entire corporate building, tied to the company's verified domain.
+> - **Folders** are departmental floors or business wings (e.g., Retail Operations, Analytics & BI, Core Engineering).
+> - **Projects** are locked, fireproof filing cabinets on each floor. Every resource (dataset, bucket, VM) lives inside exactly one cabinet.
+> - **Resources** are the individual files, ledgers, and documents inside the cabinet.
+> 
+> A security rule posted at the entrance of a floor applies automatically to every cabinet on that floor. A team working at Cabinet A cannot open Cabinet B unless explicitly granted a key.
+
+Unlike platforms where compute clusters or metastores sit at the tenancy root, Google Cloud anchors identity, billing, network boundaries, and administrative governance directly to this hierarchy. For a Principal Data Architect or an engineer transitioning from Databricks and AWS environments, understanding this hierarchy is critical. Misunderstanding the boundary of a **Project** or how inheritance flows from an **Organization** or **Folder** will lead to broken security boundaries, quota exhaustion across pipelines, or uncontained blast radiuses during pipeline failures.
 
 ```mermaid
 graph TD
@@ -246,3 +262,72 @@ graph TD
   - *Correction*: External tables and underlying GCS buckets **must reside in the exact same region or multi-region**.
 - **Anti-Pattern 3**: Attempting to resolve cross-project quota starvation by creating new datasets inside the same project.
   - *Correction*: Quotas (slots, API rate limits) are bounded by the project. Workloads must be isolated into dedicated projects or bound to distinct BigQuery Reservations.
+
+---
+
+## 8. Concrete Enterprise Scenario: ShopSphere Architecture
+
+Throughout this handbook, we follow **ShopSphere**, a multinational omnichannel retail enterprise processing 50M transactions/day with web storefronts, mobile apps, and 850 retail stores across Europe and North America.
+
+### ShopSphere Resource & Multi-Project Layout
+
+| Folder | Project ID | Primary Workload & Services | Why It Is Isolated |
+|---|---|---|---|
+| **Production** | `shopsphere-ingest-prod` | Cloud Pub/Sub, Datastream (CDC from PostgreSQL), Storage Transfer Service, landing GCS buckets. | Isolates ingress blast radius and prevents external network exposure from touching data marts. |
+| **Production** | `shopsphere-warehouse-prod` | BigQuery datasets (`raw`, `curated`, `marts`), BigLake tables over GCS. | Storage ownership boundary. Query slots are NOT consumed here by ad-hoc analysts. |
+| **Production** | `shopsphere-bi-prod` | BI Engine reservations, Looker dashboards, analyst ad-hoc query jobs. | **Compute billing boundary**: Query processing costs roll up to the BI team's cost center. |
+| **Production** | `shopsphere-compute-prod` | Cloud Dataflow (Beam), Dataproc Serverless, Cloud Composer 3. | Pipeline compute quotas (CPU, worker memory, IP pools) are isolated from interactive queries. |
+| **Non-Production** | `shopsphere-data-dev`, `shopsphere-data-test` | Identical pipeline topologies running over sanitized/masked micro-datasets. | Full sandbox isolation preventing dev pipelines from ever mutating production datasets. |
+| **Shared Services** | `shopsphere-network-host`, `shopsphere-monitoring` | Shared VPC host network, Cloud NAT gateways, centralized Cloud Logging sinks and Monitoring alert dashboards. | Governed centrally by Cloud NetOps and InfoSec teams. |
+
+### Databricks Architectural Bridge (Comparison)
+- In Databricks, tenancy typically revolves around **Account $\to$ Workspaces $\to$ Catalogs (Unity Catalog) $\to$ Schemas $\to$ Tables**.
+- In Google Cloud:
+  - An **Organization** is your top-level tenancy (like the Databricks Account).
+  - A **Project** is NOT a workspace notebook folder: it is an ironclad boundary for **billing, IAM, regional quotas, API enablement, and networking**.
+  - A **BigQuery Dataset** corresponds closely to a **Catalog/Schema** in Unity Catalog.
+  - Query compute is completely decoupled: users in `shopsphere-bi-prod` run queries against tables stored in `shopsphere-warehouse-prod` without moving data.
+
+---
+
+## 9. Scenario-Based Knowledge Checks
+
+### Question 0.1 (Single-Select: Billing & Compute Isolation)
+ShopSphere's financial analysts work in the `shopsphere-bi-prod` project. They need to query production datasets hosted in the `shopsphere-warehouse-prod` project. Finance mandates that all query processing costs must be charged to the BI department's budget rather than the central data warehouse storage budget. What IAM configuration satisfies this requirement?
+
+- [ ] A. Grant the BI analysts `roles/bigquery.admin` on `shopsphere-warehouse-prod`.
+- [ ] B. Grant the BI analysts `roles/bigquery.jobUser` in `shopsphere-bi-prod`, and `roles/bigquery.dataViewer` on the specific datasets in `shopsphere-warehouse-prod`. Ensure queries specify `shopsphere-bi-prod` as the billing project.
+- [ ] C. Configure an automated nightly Dataproc batch job to replicate warehouse tables into local datasets in `shopsphere-bi-prod`.
+- [ ] D. Move the BI analysts' user accounts into `shopsphere-warehouse-prod` and apply BigQuery row-level filters.
+
+**Correct Answer**: **B**
+
+#### Detailed Distractor Analysis:
+- **Why B is Correct**: In Google Cloud BigQuery, **query execution is billed to the project that submits the query job**, while **storage is billed to the project that owns the dataset**. Granting `roles/bigquery.jobUser` on `shopsphere-bi-prod` allows analysts to allocate compute and slots in their own project, while `roles/bigquery.dataViewer` at the dataset level in `shopsphere-warehouse-prod` provides read access to data without incurring storage charges or duplicating tables.
+- **Why A is Incorrect**: Granting `roles/bigquery.admin` on `shopsphere-warehouse-prod` violates least privilege and causes query jobs submitted in the warehouse project to bill against warehouse storage budgets.
+- **Why C is Incorrect**: Replicating tables nightly creates stale data copies, introduces operational overhead, and doubles storage charges.
+- **Why D is Incorrect**: IAM users do not "reside" inside projects; they exist in Cloud Identity / Workspace and are bound to roles.
+
+*Underlying Concept*: Separation of Storage and Compute Billing; Dataset-level IAM scoping.  
+*Official Documentation Reference*: [BigQuery Access Control & Billing Projects](https://cloud.google.com/bigquery/docs/access-control).
+
+---
+
+### Question 0.2 (Single-Select: Data Sovereignty & Location Immutability)
+ShopSphere is expanding retail operations into Germany and is legally bound by European GDPR regulations requiring that customer order transactions never leave the European Union. A junior engineer created the analytics dataset in the `US` multi-region. What must the Principal Data Architect do to resolve this non-compliance?
+
+- [ ] A. Open the BigQuery console, edit the dataset configuration, and update the location dropdown from `US` to `europe-west3` (Frankfurt).
+- [ ] B. Set up a Cross-Region VPC Network Peering between `us-central1` and `europe-west3`, and establish an authorized view.
+- [ ] C. Create a new dataset in `europe-west3` (Frankfurt), copy the historical data using a cross-region copy job or BigQuery Data Transfer Service, reconfigure upstream ingestion pipelines to point to the new dataset, verify row integrity, and delete the US dataset. Apply an Organization Policy with constraint `constraints/gcp.resourceLocations` restricting future creation to `in:eu-locations`.
+- [ ] D. Attach a Cloud KMS Customer-Managed Encryption Key (CMEK) located in Frankfurt to the US dataset.
+
+**Correct Answer**: **C**
+
+#### Detailed Distractor Analysis:
+- **Why C is Correct**: In Google Cloud, **dataset location and Cloud Storage bucket location are strictly immutable after creation**. A dataset created in `US` can never be edited or migrated in-place. The data must be copied to a newly created regional dataset in the approved geography, pipelines repointed, and the non-compliant dataset dropped. Enforcing `constraints/gcp.resourceLocations` programmatically prevents future accidental provisioning outside approved EU regions.
+- **Why A is Incorrect**: BigQuery dataset location is permanent and cannot be modified via console or API after creation.
+- **Why B is Incorrect**: VPC peering governs private IP networking for Compute Engine VMs and has zero impact on where managed BigQuery multi-tenant storage resides.
+- **Why D is Incorrect**: Encrypting US-stored data with a German CMEK key does not change the physical location of the stored ciphertext blocks on Colossus; it remains in violation of GDPR data residency.
+
+*Underlying Concept*: Immutability of Storage Geography; Organization Policy Resource Location Constraints.  
+*Official Documentation Reference*: [BigQuery Dataset Locations](https://cloud.google.com/bigquery/docs/locations) and [Resource Location Restriction Org Policy](https://cloud.google.com/resource-manager/docs/organization-policy/defining-locations).

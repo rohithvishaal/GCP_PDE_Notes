@@ -1,5 +1,10 @@
 # Identity, Access Management (IAM), Service Accounts & Authentication
 
+**Tag**: Required (Exam Objective 1.1: IAM, Service Accounts, and Organization Policies; Objective 2.1: Pipeline Identity & Auth)  
+**Sources**: Official Google Cloud Documentation + PDE Exam Syllabus + Enterprise Security Best Practices
+
+---
+
 ## 1. Google Cloud IAM Architecture
 
 Identity and Access Management (IAM) in Google Cloud establishes an authorization framework where access is defined by binding **who** (Identities/Principals) can do **what** (Roles containing specific Permissions) on **which** (Resources in the hierarchy).
@@ -261,3 +266,41 @@ Google Cloud **Tags** (distinct from label metadata) are strongly-typed key-valu
 3. **Trap: BigQuery Admin vs BigQuery Job User**:
    - Exam questions asking how to grant developers the ability to run queries without giving them the right to delete datasets will offer `roles/bigquery.admin`, `roles/bigquery.user`, and `roles/bigquery.jobUser`.
    - The minimal, correct answer is `roles/bigquery.jobUser` on the compute project, paired with `roles/bigquery.dataViewer` on the target dataset.
+4. **Trap: Service Account User vs Service Account Token Creator**:
+   - `roles/iam.serviceAccountUser` ("ActAs"): Grants permission to attach the Service Account to an execution runtime (Compute Engine VM, Dataflow worker, Dataproc node). Required by deployers and CI/CD pipelines.
+   - `roles/iam.serviceAccountTokenCreator`: Grants permission to mint short-lived OAuth 2.0 access tokens to impersonate the identity directly via CLI or API.
+
+---
+
+## 9. ShopSphere Enterprise Pipeline Identity Mapping
+
+In the **ShopSphere** retail platform, we strictly ban long-lived downloaded JSON service account keys (`iam.disableServiceAccountKeyCreation` Org Policy constraint is active). Every workload executes under a purpose-built, least-privilege machine identity:
+
+| Service Account Email | Dedicated Workload | Roles Granted | Resource Scope |
+|---|---|---|---|
+| `sa-orders-stream@shopsphere-ingest-prod.iam.gserviceaccount.com` | Dataflow streaming pipeline consuming orders | `roles/pubsub.subscriber`<br/>`roles/dataflow.worker`<br/>`roles/bigquery.dataEditor` | Subscription in `shopsphere-ingest-prod`; `raw` dataset in `shopsphere-warehouse-prod` |
+| `sa-datastream-cdc@shopsphere-ingest-prod.iam.gserviceaccount.com` | Datastream capturing Cloud SQL changes | `roles/datastream.admin`<br/>`roles/storage.objectAdmin` | GCS landing bucket in `shopsphere-ingest-prod` |
+| `sa-composer-runner@shopsphere-compute-prod.iam.gserviceaccount.com` | Cloud Composer 3 orchestrator | `roles/composer.worker`<br/>`roles/bigquery.jobUser` | Project `shopsphere-compute-prod` |
+
+---
+
+## 10. Scenario-Based Knowledge Checks
+
+### Question 0.5 (Single-Select: Least Privilege Pipeline Service Accounts)
+A newly developed Cloud Dataflow streaming pipeline must ingest clickstream messages from a Cloud Pub/Sub subscription in `shopsphere-ingest-prod` and write validated, formatted records into the `fact_clickstream` table within the `analytics_curated` dataset in `shopsphere-warehouse-prod`. The pipeline will be deployed by the data engineering team. Which security configuration enforces the Principle of Least Privilege?
+
+- [ ] A. Run the Dataflow pipeline under the default Compute Engine service account (`<project-number>-compute@developer.gserviceaccount.com`), which has the `Editor` role on both projects.
+- [ ] B. Create a custom service account `sa-dataflow-clickstream`. Grant it `roles/dataflow.worker` on `shopsphere-compute-prod`, `roles/pubsub.subscriber` strictly on the target subscription, and `roles/bigquery.dataEditor` strictly on the `analytics_curated` dataset. Grant the data engineers `roles/iam.serviceAccountUser` on `sa-dataflow-clickstream`.
+- [ ] C. Create a service account with `roles/owner` on the Organization, generate a JSON key, and store it in an encrypted Cloud Storage bucket read by the pipeline at startup.
+- [ ] D. Grant the data engineers `roles/bigquery.admin` on `shopsphere-warehouse-prod` and launch the pipeline with the engineers' individual user credentials.
+
+**Correct Answer**: **B**
+
+#### Detailed Distractor Analysis:
+- **Why B is Correct**: Least privilege mandates creating a dedicated machine identity (`sa-dataflow-clickstream`) carrying only the exact permissions needed to pull messages, run Dataflow workers, and append data into the destination dataset. Furthermore, data engineers need `roles/iam.serviceAccountUser` ("ActAs" permission) to attach this service account to the Dataflow job at deployment time without possessing direct write permissions to production tables themselves.
+- **Why A is Incorrect**: Relying on default service accounts with primitive `Editor` roles provides massive over-permissioning across all project resources and is a classic exam security anti-pattern.
+- **Why C is Incorrect**: Long-lived JSON keys introduce critical credential leakage risks, and `roles/owner` on the organization is catastrophic over-privilege.
+- **Why D is Incorrect**: Production automated pipelines must never execute under human user credentials, and `roles/bigquery.admin` violates least privilege.
+
+*Underlying Concept*: Dedicated Service Accounts, Service Account User ("ActAs"), Scoped Dataset Roles.  
+*Official Documentation Reference*: [Dataflow Security and Permissions](https://cloud.google.com/dataflow/docs/concepts/security-and-permissions) and [Service Account User Role](https://cloud.google.com/iam/docs/service-account-overview).

@@ -436,9 +436,14 @@ To deliver sub-millisecond data access for caching layers, session stores, and r
 - Primary persistent storage for critical business data (in-memory data is volatile unless RDB/AOF persistence is explicitly enabled).
 - Analytics across historical time horizons (use BigQuery).
 
-### 10.6 How It Works
-- Deployed within a customer VPC with Private Services Access.
-- Standard Tier provides automatic cross-zone failover with a 99.9% availability SLA.
+### 10.6 How It Works & High Availability Architecture
+- **Basic Tier (Non-HA)**: A single Redis instance residing in one zone. Zero replication, no failover. If the underlying VM or zone fails, cache data is lost and the endpoint is unavailable during recreation. Suitable only for development or disposable caches.
+- **Standard Tier (High Availability & Failover)**: Provisions a cross-zone active-standby replica pair. 
+  - Primary node in Zone A, replica node in Zone B with asynchronous replication.
+  - Automatic cross-zone failover completes in under 30 seconds if the primary becomes unhealthy. Client applications reconnect to the same persistent internal IP address.
+  - Read Replicas (up to 5 read replicas) allow scaling out read throughput.
+- **Persistence Options**: Supports RDB (Redis Database snapshots taken periodically to Cloud Storage) and AOF (Append-Only File for minimal RPO recovery).
+- **Cluster Mode**: Enables horizontal keyspace sharding across up to 250 shards for multi-terabyte caches delivering tens of millions of operations per second with microsecond latency.
 
 ### 10.7 Databricks Comparison
 - **AWS ElastiCache equivalent**: Used in serving layers for sub-millisecond retrieval.

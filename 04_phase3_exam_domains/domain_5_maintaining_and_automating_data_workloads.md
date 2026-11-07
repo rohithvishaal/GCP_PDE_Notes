@@ -82,7 +82,37 @@ bq mk --project_id=enterprise-prod-data \
 
 ---
 
-### 2. Dataproc Cost Optimization Strategies
+### 2. The BigQuery Administration Panel & Query Execution Priorities
+
+#### The BigQuery Admin Panel (Console Observability)
+The BigQuery Administration panel in the Google Cloud Console provides native operational telemetry without needing external logging queries:
+- **Real-Time Slot Utilization**: Visualizes active slot consumption across all reservations, showing baseline commitments, autoscaled burst slots, and **idle slot borrowing** (where idle slots allocated to ETL are borrowed by BI queries).
+- **Job Concurrency & Execution Waterfalls**: Displays active queries, queued queries waiting for slots, and stage-by-stage execution timelines (input read -> shuffle -> compute -> write).
+- **Reservation Assignments**: Manages workload routing where projects or folders are assigned to reservations based on `job_type`:
+  - `QUERY`: Interactive and scheduled SQL queries.
+  - `PIPELINE`: Continuous streaming writes and loads.
+  - `ML_EXTERNAL`: BigQuery ML remote model calls.
+
+#### Interactive vs. Batch Query Priorities
+When submitting queries via CLI, API, or Composer, engineers configure query priority:
+
+| Parameter | Execution Mechanics | Concurrency Limit Impact | Best Production Use Case |
+|---|---|---|---|
+| **`priority='INTERACTIVE'` (Default)** | Query is submitted immediately to available slots. If slots are saturated, query experiences slot contention. | **Counts against** the project concurrent query limit (typically 100 concurrent queries). | User-facing dashboards, ad-hoc analyst exploration, critical low-latency APIs. |
+| **`priority='BATCH'`** | Query is queued by Google Cloud and executed as soon as idle capacity becomes available (usually within minutes). | **DOES NOT count** against the project concurrent query quota! | Nightly ELT transformations, heavy historical backfills, automated weekly financial reconciliations. |
+
+```bash
+# Submitting a Heavy Nightly Backfill Query in Batch Mode
+bq query \
+    --use_legacy_sql=false \
+    --batch=true \
+    --destination_table=shopsphere_warehouse:curated.historical_orders_backfill \
+    "SELECT * FROM shopsphere_warehouse.raw.orders WHERE order_date <= '2025-01-01'"
+```
+
+---
+
+### 3. Dataproc Cost Optimization Strategies
 
 Running large Spark or Hadoop workloads continuously on persistent clusters creates massive financial waste.
 
@@ -113,7 +143,7 @@ When Dataproc autoscaling scales down a cluster, or when Google Cloud reclaims a
 
 ---
 
-### 3. Cloud Storage Lifecycle Optimization & Autoclass
+### 4. Cloud Storage Lifecycle Optimization & Autoclass
 
 ```mermaid
 flowchart TD

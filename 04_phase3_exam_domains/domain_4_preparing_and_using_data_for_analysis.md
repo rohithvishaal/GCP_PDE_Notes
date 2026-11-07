@@ -298,6 +298,60 @@ FROM
 
 ---
 
+### 4. In-Pipeline AI Data Enrichment: Apache Beam RunInference Transform
+
+In high-throughput streaming pipelines (e.g., fraud classification on 50,000 credit card swipes/second), calling an external REST model endpoint (such as a Vertex AI endpoint via HTTP) from inside an Apache Beam DoFn is a **severe architectural anti-pattern**. 
+
+#### The Problem with External REST Calls in Pipelines:
+- **Network Latency Overhead**: HTTP round-trip latency (10-50ms per call) destroys streaming pipeline throughput.
+- **Connection Starvation & Throttling**: Vertex AI endpoint QPS limits trigger HTTP 429 rate limit exceptions, causing worker backpressure.
+- **Cost**: Millions of individual HTTP REST calls inflate cloud API invocation charges.
+
+#### The Production Solution: RunInference
+Apache Beam provides the native RunInference transform:
+- **Local Model In-Memory Execution**: Loads trained model weights (TensorFlow, PyTorch, ONNX, or TensorRT) directly into the Dataflow worker VM's memory.
+- **Automatic Micro-Batching**: Automatically groups streaming elements into optimal micro-batches for vector SIMD / GPU processing on worker hardware.
+- **Zero Network Hops**: Predictions run locally at memory bus speeds, maintaining single-digit millisecond pipeline SLAs.
+
+`python
+# Production Beam Pipeline using RunInference for Local Model Serving
+import apache_beam as beam
+from apache_beam.ml.inference.base import RunInference
+from apache_beam.ml.inference.pytorch_inference import PytorchModelHandlerTensor
+
+class FormatFraudFeatures(beam.DoFn):
+    def process(self, element):
+        # Convert dictionary features into numerical tensor
+        yield parse_to_tensor(element)
+
+model_handler = PytorchModelHandlerTensor(
+    state_dict_path='gs://shopsphere-ml-models/fraud_detection_v3.pt',
+    model_class=FraudDetectionNetwork,
+    model_params={'input_dim': 32, 'hidden_dim': 64}
+)
+
+with beam.Pipeline(options=pipeline_options) as p:
+    predictions = (
+        p 
+        | 'ReadTransactions' >> beam.io.ReadFromPubSub(subscription=sub_path)
+        | 'FormatFeatures' >> beam.ParDo(FormatFraudFeatures())
+        | 'LocalModelInference' >> RunInference(model_handler)
+        | 'RouteFraudAlerts' >> beam.ParDo(FilterSuspiciousTransactions())
+        | 'WriteToBigQuery' >> beam.io.WriteToBigQuery(table_spec)
+    )
+`
+
+---
+
+### 5. Prompting LLMs for Query Generation (BigQuery Studio & Gemini Integration)
+
+Modern data engineering workflows incorporate Large Language Models directly into the analytical lifecycle:
+1. **Natural Language to SQL Generation**: Using Gemini in BigQuery to generate syntactically valid, schema-aware SQL from business prompts (e.g., *'Find top 10 customers by revenue who returned items in Frankfurt during Q3'*).
+2. **Generative Query Optimization**: Prompting LLMs to rewrite inefficient correlated subqueries or unnested cross-joins into partitioned and clustered window functions.
+3. **Automated Documentation & Semantic Cataloging**: Using ML.GENERATE_TEXT with Gemini 1.5 Flash to automatically generate business descriptions, data dictionary entries, and column annotations across raw legacy datasets in Dataplex Catalog.
+
+---
+
 ## Section 4.3: Sharing and Publishing Data
 
 ### 1. Analytics Hub

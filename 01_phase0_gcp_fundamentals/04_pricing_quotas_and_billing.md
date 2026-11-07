@@ -1,5 +1,10 @@
 # Pricing, Quotas, Cost Controls & Resource Management
 
+**Tag**: Required (Exam Objective 5.1: Optimizing Resources for Cost & Compute; Objective 5.4: Managing Budgets, Quotas, and Billing Issues)  
+**Sources**: Official Google Cloud Documentation + PDE Exam Syllabus + Enterprise FinOps Best Practices
+
+---
+
 ## 1. Cloud Billing Architecture
 
 In Google Cloud, cost management is decoupled from operational resource creation. A **Cloud Billing Account** is an organizational entity linked to a payment profile that tracks financial liability across one or more projects.
@@ -188,3 +193,55 @@ To prevent runaway billing in production, implement these four structural defens
     2. `bi_analysts_reservation`: Allocated limited auto-scaling slots to prevent analyst queries from exhausting budget, paired with `maximum_bytes_billed` caps.
 - **Scenario**: *A transient Spark job on Dataproc needs to minimize compute cost without failing when spot instances are terminated.*
   - **Correct Architecture**: Configure the Dataproc cluster with standard persistent VMs for the Master node and primary workers, and **Spot VMs (Secondary Workers)** for 70%+ of the cluster compute. If Spot VMs are reclaimed, Spark continues processing on primary workers without losing cluster state.
+
+---
+
+## 7. Primary Cost Drivers Across Core GCP Data Services
+
+| Service | Primary Cost Drivers | How to Minimize Without Hurting Performance |
+|---|---|---|
+| **BigQuery** | Compute (bytes scanned on-demand OR slots in Editions); Storage (active vs long-term; logical vs physical compressed); Streaming insert API | Enforce table partitioning and clustering; require partition filters; purchase baseline slot commitments with autoscaling ceilings; convert raw tables to physical storage billing. |
+| **Cloud Storage** | GB-months by class; API operations (Class A writes vs Class B reads); retrieval fees on cold classes; egress | Enable Autoclass; apply automated lifecycle rules (Standard $\to$ Nearline $\to$ Coldline); avoid storing millions of tiny $<1\text{MB}$ files. |
+| **Cloud Dataflow** | Worker vCPU-seconds and Memory-seconds; Streaming Engine throughput; Shuffle data processed | Enable Streaming Engine (offloads state from VMs); right-size worker machine types; use Flex templates to avoid compiling overhead. |
+| **Cloud Dataproc** | Compute Engine VM runtime + Dataproc license charge per vCPU-hr; attached PD storage | Use **ephemeral job-scoped clusters**; use Cloud Storage instead of persistent HDFS; use Spot VMs on secondary workers with graceful decommissioning. |
+| **Cloud Pub/Sub** | Data volume published and delivered; message retention; cross-region network egress | Use message ordering keys only where strictly necessary; filter subscriptions on attributes; prune unused subscriptions. |
+| **Cloud Composer** | Environment infrastructure (GKE nodes, Cloud SQL, web server, triggerers) running 24/7 | Select Composer 3 with small or medium auto-managed profiles; optimize DAG parsing frequencies; avoid using Composer as a data processing engine. |
+| **Cloud Bigtable** | Provisioned nodes per cluster; SSD vs HDD storage; cross-cluster replication | Use automated node autoscaling based on CPU target (65%); purge old versions with compound GC policies. |
+| **Cloud Spanner** | Provisioned Processing Units (100–900 PU) or Nodes; storage; multi-region replication | Scale processing units down during off-peak windows; interleave child tables to eliminate cross-split join overhead. |
+
+### Critical Distinction: Budgets vs. Quotas
+- **Budgets**: Financial monitoring tools that track spend against an alert threshold (e.g., 50%, 90%, 100%). **Budgets DO NOT stop spending or disable resources by default.** To stop spend, you must write custom automation (Pub/Sub $\to$ Cloud Function $\to$ disable billing).
+- **Quotas**: Operational constraints enforced by Google to prevent accidental resource exhaustion or malicious abuse (e.g., maximum 2,000 BigQuery slots per project, 100 Compute Engine vCPUs per region). **Quotas cap resource quantity or rate, but do NOT track dollars.**
+
+### BigQuery Job Execution: Interactive vs. Batch
+- **Interactive Queries (Default)**: Executed immediately. Counted against concurrent query limits. Billed normally.
+- **Batch Queries**: Queued by BigQuery and executed as soon as idle compute resources become available (usually within minutes). **Crucial Exam Rule**: Batch queries do NOT count against your project's concurrent rate limits. Use batch mode for non-interactive nightly reporting transformations.
+
+---
+
+## 8. Scenario-Based Knowledge Check
+
+### Question 0.3 (Multi-Select: Choose TWO - FinOps Cost Attribution & Alerts)
+ShopSphere's Chief Financial Officer (CFO) is alarmed by a sudden 40% surge in monthly cloud expenses. The CFO demands two immediate operational controls:
+1. Automated email notifications when projected monthly spend crosses 50%, 80%, and 100% of the allocated department budget.
+2. A SQL-queryable mechanism to accurately break down daily BigQuery and Cloud Storage expenses across individual engineering squads (`checkout-team`, `inventory-team`, `marketing-team`).
+
+Which two actions must the Principal Data Architect implement?
+
+- [ ] A. Create a Cloud Budget for the billing account with alert thresholds at 50%, 80%, and 100%, and configure email notifications to the finance team.
+- [ ] B. Enable Cloud Billing Export to BigQuery, enforce a mandatory `team` resource label across all projects, buckets, and BigQuery datasets, and query the detailed billing export table using SQL.
+- [ ] C. Create a Cloud Budget with a hard stop rule that automatically disables the billing account when spend reaches 100%.
+- [ ] D. Create a separate Google Cloud Organization and separate billing account for every query job submitted by an engineering team.
+- [ ] E. Instruct the teams to parse Cloud Logging records manually every week to calculate byte totals.
+
+**Correct Answers**: **A and B**
+
+#### Detailed Distractor Analysis:
+- **Why A is Correct**: Cloud Budgets natively supports defining percentage thresholds (50%, 80%, 100%) against a monthly target and automatically sends alert notifications to Billing Account Administrators and custom email recipients.
+- **Why B is Correct**: Cloud Billing Export streams detailed usage costs directly into a BigQuery dataset. Pairing this with a standardized resource label (`team: checkout-team`, etc.) allows SQL queries on `gcp_billing_export_resource_v1_*` to unnest labels and accurately attribute cost per department.
+- **Why C is Incorrect**: Cloud Budgets do NOT have a built-in checkbox to "disable the billing account at 100%". Furthermore, automatically disabling billing in production terminates all services, drops external IPs, and causes an immediate business outage.
+- **Why D is Incorrect**: Organizations and billing accounts are high-level enterprise entities; creating them per query job is preposterous and unworkable.
+- **Why E is Incorrect**: Cloud Logging is for application and audit telemetry, not financial reconciliation. It does not reflect negotiated contract pricing, CUD discounts, or SKU pricing models.
+
+*Underlying Concept*: Cloud Budgets vs Hard Caps; FinOps Labeling & BigQuery Billing Export.  
+*Official Documentation Reference*: [Cloud Billing Export to BigQuery](https://cloud.google.com/billing/docs/how-to/export-data-bigquery) and [Setting Budgets and Alerts](https://cloud.google.com/billing/docs/how-to/budgets).

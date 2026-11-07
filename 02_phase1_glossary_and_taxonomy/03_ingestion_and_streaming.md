@@ -238,7 +238,45 @@ A high-throughput, managed service optimized for transferring petabytes of unstr
 
 ---
 
-## 7. Comparative Ingestion Technology Matrix
+## 7. Product 6: Managed Service for Apache Kafka
+
+### 7.1 Identification & Category
+- **Product Name**: Managed Service for Apache Kafka
+- **Category**: Managed Open-Source Event Streaming Broker
+
+### 7.2 What It Is
+A fully managed, native Apache Kafka service operated by Google Cloud that provides 100% open-source Kafka client compatibility with zero broker patching, automated storage scaling, and integrated Cloud Monitoring.
+
+### 7.3 When to Use
+- You possess an extensive existing ecosystem of Apache Kafka producer and consumer microservices, Kafka Streams applications, or third-party Kafka Connect connectors that cannot be rewritten.
+- You require strict partition-based ordering, specific Kafka client libraries, or multi-tenant Kafka cluster topologies.
+
+### 7.4 When NOT to Use (Pub/Sub vs. Kafka)
+- **Default Choice**: For greenfield cloud applications, choose **Cloud Pub/Sub**. Pub/Sub is fully serverless, provides global multi-region scaling with zero partition sizing or broker management, and natively integrates with BigQuery and Cloud Storage.
+- Choose **Managed Service for Apache Kafka** only when existing Kafka API compatibility is a hard requirement.
+
+---
+
+## 8. Product 7: Google Transfer Appliance
+
+### 8.1 Identification & Category
+- **Product Name**: Transfer Appliance
+- **Category**: Offline High-Density Physical Data Migration Appliance
+
+### 8.2 What It Is & Operational Flow
+A ruggedized, high-capacity physical storage hardware appliance shipped directly to an on-premises data center.
+1. The customer attaches the appliance to local high-speed rack switches via 10GbE / 40GbE ports.
+2. Data is transferred locally over NFS/SMB shares onto the AES-256 encrypted appliance.
+3. The appliance is shipped via secure courier to a Google Cloud data center.
+4. Google ingests the data directly into the customer's designated Cloud Storage bucket.
+
+### 8.3 When to Use
+- Moving large datasets (>20TB up to multiple Petabytes) where available network uplink bandwidth is limited, congested, or expensive.
+- Rule of thumb: If calculated network transfer time over existing pipes exceeds **2-3 weeks**, Transfer Appliance is faster, more deterministic, and significantly cheaper.
+
+---
+
+## 9. Comparative Ingestion Technology Matrix
 
 | Ingestion Technology | Data Pattern | Latency SLA | Protocol / Formats | Primary Destination | Databricks Analogue |
 | :--- | :--- | :--- | :--- | :--- | :--- |
